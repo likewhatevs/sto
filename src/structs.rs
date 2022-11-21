@@ -4,7 +4,7 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub struct StackTrace {
     pub event: String,
-    pub stack_ndoe_datas: Vec<StackNodeData>,
+    pub stack_node_datas: Vec<StackNodeData>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

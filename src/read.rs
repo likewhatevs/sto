@@ -1,18 +1,17 @@
 use crate::globals::{TaskQueue, HASHER_SEED, TASK_COUNT, WORKER_COUNT};
 use crate::parse::process_record;
 use highway::{HighwayHash, HighwayHasher};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time;
 
-pub async fn read() -> Result<(), anyhow::Error> {
-    let path = "/Users/patsomaru/Documents/GitHub/sto/tests/cpu_data.txt";
-    let file = File::open(path).await?;
-    let binary_identifier = "thing you pass in sry";
+pub async fn read(in_file: PathBuf, binary_identifier: String) -> Result<(), anyhow::Error> {
+    let file = File::open(in_file).await?;
     let mut hasher = HighwayHasher::new(HASHER_SEED);
-    hasher.append(binary_identifier.as_bytes());
+    hasher.append(binary_identifier.clone().as_bytes());
     let root_id = hasher.finalize64() >> 1;
     let queue = Arc::new(TaskQueue::new(TASK_COUNT));
     let buf_reader = BufReader::new(file);
@@ -22,10 +21,11 @@ pub async fn read() -> Result<(), anyhow::Error> {
 
     for _a in 1..WORKER_COUNT {
         let q_ref = queue.clone();
+        let binary_identifier = binary_identifier.clone();
         tokio::spawn(async move {
             loop {
                 let data_chunk = q_ref.pop().await;
-                process_record(data_chunk, root_id, binary_identifier.into()).await;
+                process_record(data_chunk, root_id, binary_identifier.clone()).await;
             }
         });
     }
@@ -35,10 +35,9 @@ pub async fn read() -> Result<(), anyhow::Error> {
             let mut done = false;
             while !done {
                 match queue.try_push(buf.clone()) {
-                    Err(x) => (),
-                    Ok(x) => {
+                    Err(_x) => (),
+                    Ok(_x) => {
                         done = true;
-                        ()
                     }
                 }
                 // noop 10 ms sleep.
@@ -46,7 +45,7 @@ pub async fn read() -> Result<(), anyhow::Error> {
             }
             buf.clear();
         } else {
-            buf.push(format!("{}\n", line).into());
+            buf.push(format!("{}", line));
         }
     }
 

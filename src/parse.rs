@@ -1,19 +1,21 @@
 use crate::globals::{BINARIES, DATAS, HASHER_SEED, NODES};
-use crate::structs::{ProfiledBinary, StackNode, StackNodeData, StackTrace};
+use crate::structs::{ProfiledBinary, StackNode, StackNodeData};
 use cached::proc_macro::cached;
 use cached::SizedCache;
-use highway::{HighwayHash, HighwayHasher, Key};
+use highway::{HighwayHash, HighwayHasher};
 use lazy_static::lazy_static;
 use regex::Regex;
+use std::sync::Arc;
 
 lazy_static! {
-    static ref HEADER_RE: Regex =
-        Regex::new(r"^.*\s+[0-9]+\s+\[[0-9]+\]\s+[0-9]+\.[0-9]+:\s+[0-9]+\s+(?P<event>.*?)[:].*$")
-            .unwrap();
+    static ref HEADER_RE: Regex = Regex::new(
+        r#"(?m)^.*\s+[0-9\-]+\s+\[[0-9]+\]\s+[0-9]+\.[0-9]+:\s+[0-9]+\s+(?P<event>.*?)[:].*$"#
+    )
+    .unwrap();
     static ref SYMBOL_RE: Regex =
-        Regex::new(r"^\s+[0-9a-f]+\s+(?P<symbol>.*)\s\((?P<bin_file>.*)\).*$").unwrap();
+        Regex::new(r#"(?m)^\s+[0-9a-f]+\s+((?P<symbol>.*)\+0x.*|(?P<other_sym>\[.*\]))\s\((?P<bin_file>.*)\).*$"#).unwrap();
     static ref FILE_LINE_NO_RE: Regex =
-        Regex::new(r"^(?P<src_file>\s+.*?):(?P<line_no>[0-9]+)$").unwrap();
+        Regex::new(r#"(?m)^\s+(((?P<src_file>.*?):(?P<line_no>[0-9]+))|\[(?P<src_file_2>\s*.*[0-9a-z\.]+)\]\[.*|((?P<src_file_3>.*[a-z0-9\.]+)\[.*))$"#).unwrap();
 }
 
 #[cached(
@@ -43,36 +45,35 @@ fn get_data_id(symbol: Option<String>, file: Option<String>, line_number: Option
 }
 
 pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String) {
-    let mut event: Option<String> = Option::None;
-    let mut symbol: Option<String> = Option::None;
-    let mut bin_file: Option<String> = Option::None;
-    let mut file: Option<String> = Option::None;
-    let mut line_number: Option<u32> = Option::None;
-    let mut src_file: Option<String> = Option::None;
+    let event: Option<String>;
+    let mut symbol: Option<String> = None;
+    let mut bin_file: Option<String> = None;
+    let mut line_number: Option<u32> = None;
+    let mut src_file: Option<String> = None;
     let mut depth: u32 = 0;
+    let mut reset = false;
     fn clear(
-        mut symbol: Option<String>,
-        mut bin_file: Option<String>,
-        mut file: Option<String>,
-        mut line_number: Option<u32>,
-        mut src_file: Option<String>,
+        symbol: &mut Option<String>,
+        bin_file: &mut Option<String>,
+        line_number: &mut Option<u32>,
+        src_file: &mut Option<String>,
     ) {
-        symbol = Option::None;
-        bin_file = Option::None;
-        file = Option::None;
-        line_number = Option::None;
-        src_file = Option::None;
+        *symbol = None;
+        *bin_file = None;
+        *line_number = None;
+        *src_file = None;
     }
-    let mut is_symbol_line = false;
-    if data.len() > 0 {
+    if !data.is_empty() {
         event = HEADER_RE
             .captures(data.get(0).unwrap())
+            .ok_or_else(|| log::error!("{:#?}", data.get(0)))
+            .ok()
             .unwrap()
             .name("event")
             .map(|x| x.as_str().into());
         let profiled_binary = ProfiledBinary {
             id: root_id,
-            identifier,
+            identifier: identifier.clone(),
             event: event.unwrap(),
         };
         BINARIES
@@ -81,57 +82,67 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
             .or_insert(profiled_binary);
     }
     let mut parent_id = 0;
-    let mut data = data.clone();
+    let mut data = data;
     data.reverse();
     let mut it = data.iter().peekable();
     while let Some(row) = it.next() {
-        if !it.peek().is_none() {
-            if is_symbol_line {
-                let sym_data = SYMBOL_RE.captures(&row).unwrap();
-                symbol = sym_data.name("symbol").map(|x| x.as_str().into());
+        if it.peek().is_some() {
+            let sym_data = SYMBOL_RE.captures(row);
+
+            if let Some(sym_data) = sym_data {
+                symbol = sym_data
+                    .name("symbol")
+                    .map(|x| x.as_str().into())
+                    .or_else(|| sym_data.name("other_sym").map(|x| x.as_str().into()));
                 bin_file = sym_data.name("bin_file").map(|x| x.as_str().into());
-                is_symbol_line = false;
-                file = src_file.clone().or_else(|| bin_file.clone());
-                let data_id = get_data_id(symbol.clone(), file.clone(), line_number.clone());
-                let node_id = get_node_id(parent_id.clone(), data_id.clone(), root_id);
-                let stack_node_data = StackNodeData {
-                    id: data_id,
-                    symbol: symbol.clone().unwrap_or("".into()),
-                    file: file.clone().unwrap_or("".into()),
-                };
-                let stack_node = StackNode {
-                    id: node_id,
-                    parent_id,
-                    data_id,
-                    occurrences: 1,
-                    depth,
-                };
-                NODES
-                    .clone()
-                    .entry(stack_node.id)
-                    .and_modify(|x| x.occurrences += 1)
-                    .or_insert(stack_node);
-                DATAS
-                    .clone()
-                    .entry(stack_node_data.id)
-                    .or_insert(stack_node_data);
-                clear(
-                    symbol.clone(),
-                    bin_file.clone(),
-                    file.clone(),
-                    line_number,
-                    src_file.clone(),
-                );
-                depth += 1;
-                parent_id = node_id;
-            } else {
-                let line_data = FILE_LINE_NO_RE.captures(&row).unwrap();
-                src_file = line_data.name("src_file").map(|x| x.as_str().into());
+            }
+
+            let line_data = FILE_LINE_NO_RE.captures(row);
+            if let Some(line_data) = line_data {
+                src_file = line_data
+                    .name("src_file")
+                    .map(|x| x.as_str().into())
+                    .or_else(|| line_data.name("src_file_2").map(|x| x.as_str().into()))
+                    .or_else(|| line_data.name("src_file_3").map(|x| x.as_str().into()));
                 line_number = line_data
                     .name("line_no")
                     .and_then(|x| x.as_str().parse().ok())
                     .or(Some(0));
-                is_symbol_line = true;
+            }
+            if let Some(symbol) = symbol.clone() {
+                if let Some(src_file) = src_file.clone() {
+                    let data_id =
+                        get_data_id(Some(symbol.clone()), Some(src_file.clone()), line_number);
+                    let node_id = get_node_id(parent_id, data_id, root_id);
+                    let stack_node_data = StackNodeData {
+                        id: data_id,
+                        symbol: symbol.clone(),
+                        file: src_file,
+                    };
+                    let stack_node = StackNode {
+                        id: node_id,
+                        parent_id,
+                        data_id,
+                        occurrences: 1,
+                        depth,
+                    };
+                    NODES
+                        .clone()
+                        .entry(stack_node.id)
+                        .and_modify(|x| x.occurrences += 1)
+                        .or_insert(stack_node);
+                    DATAS
+                        .clone()
+                        .entry(stack_node_data.id)
+                        .or_insert(stack_node_data);
+                    reset = true;
+                    depth += 1;
+                    parent_id = node_id;
+                }
+            }
+            if reset {
+                clear(&mut symbol, &mut bin_file, &mut line_number, &mut src_file);
+                reset = false;
             }
         }
     }

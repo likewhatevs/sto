@@ -11,7 +11,6 @@ log = "0.4.17"
 deadqueue = "0.2.4"
 cached = "0.40"
 highway = "0.8"
-clap = "4.0"
 serde = "1.0"
 rmp-serde = "1.1"
 dashmap = "5.4"
@@ -24,10 +23,12 @@ tokio = { version = "1.22.0", features = ["full"] }
 #bincode = "1.3.3"
 once_cell = "1.16.0"
 serde_derive = "1.0.147"
+clap = { version = "4.0.26", features = ["derive"] }
 
 [profile.release]
 lto = true
 opt-level = 3
 codegen-units = 1
-rustflags = ["-Ctarget-cpu=native", "-Z tune-cpu=machine"]
+rustflags = ["-Ctarget-cpu=native"]
+#, "-Z tune-cpu=machine"]
 
