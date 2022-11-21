@@ -1,0 +1,15 @@
+cmake_minimum_required(VERSION 3.22.0)
+project(burn CXX)
+
+include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
+conan_basic_setup(TARGETS)
+find_package(glog)
+
+add_executable(${PROJECT_NAME} main.cpp)
+target_link_libraries(${PROJECT_NAME} CONAN_PKG::folly)
+target_link_libraries(${PROJECT_NAME} CONAN_PKG::xoshiro-cpp)
+target_link_libraries(${PROJECT_NAME} CONAN_PKG::gflags)
+target_link_libraries(${PROJECT_NAME} CONAN_PKG::glog)
+set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)

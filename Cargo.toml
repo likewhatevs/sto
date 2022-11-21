@@ -22,7 +22,7 @@ dashmap = "5.4"
 #blazesym = "0.1"
 anyhow = "1.0"
 thiserror = "1.0"
-binrw = "0.10"
+
 [dev-dependencies]
 test-log = "0.2"
 file_diff = "1.0.0"
