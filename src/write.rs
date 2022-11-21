@@ -1,0 +1,40 @@
+use crate::globals::{BINARIES, DATAS, NODES};
+use crate::structs::StoData;
+use rmp_serde as rmps;
+use rmps::{Deserializer, Serializer};
+use serde::Serialize;
+use std::collections::HashMap;
+use tokio::fs::File;
+use tokio::io::{AsyncBufReadExt, AsyncSeek, AsyncWriteExt, BufReader, BufWriter};
+pub async fn write() -> Result<(), anyhow::Error> {
+    let mut data_out = StoData {
+        stack_node_datas: HashMap::from_iter(
+            DATAS
+                .clone()
+                .iter()
+                .map(|x| (x.key().clone(), x.value().clone())),
+        ),
+        stack_nodes: HashMap::from_iter(
+            NODES
+                .clone()
+                .iter()
+                .map(|x| (x.key().clone(), x.value().clone())),
+        ),
+        profiled_binaries: HashMap::from_iter(
+            BINARIES
+                .clone()
+                .iter()
+                .map(|x| (x.key().clone(), x.value().clone())),
+        ),
+    };
+    let mut outbuf = Vec::new();
+    data_out
+        .serialize(&mut Serializer::new(&mut outbuf))
+        .unwrap();
+    let mut outfile = File::open("outfile").await?;
+    let mut bufwriter = BufWriter::new(outfile);
+    bufwriter.write_all(&mut outbuf).await?;
+    bufwriter.flush().await?;
+    bufwriter.shutdown().await?;
+    Ok(())
+}
