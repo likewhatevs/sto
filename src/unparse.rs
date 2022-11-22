@@ -89,17 +89,17 @@ pub fn unparse_and_write(
 ) -> Result<(), anyhow::Error> {
     let mut tera = Tera::default();
     let template_str = "
-{%- for stack_node_data_list in stack_node_data_lists %}
+{%- for stack_node_data_list in stack_node_data_lists -%}
 {%- for i in range(end=stack_node_data_list.count) %}
 perf 209124 [000]  7006.226761:          1 {{stack_node_data_list.event}}:uk:
-{%- for stack_node_data in stack_node_data_list.data_list %}
+{%- for stack_node_data in stack_node_data_list.data_list -%}
 {%- if stack_node_data.symbol and stack_node_data.bin_file %}
                   {{stack_node_data.symbol}}+0x9d ({{stack_node_data.bin_file}})
-{%- else if stack_node_data.symbol %}
+{%- elif stack_node_data.symbol %}
         ffffffffb12d1f18 {{stack_node_data.symbol}}+0x38 ([kernel.kallsyms])
-{%- else if stack_node_data.bin_file %}
+{%- elif stack_node_data.bin_file %}
         ffffffffb12d1f18 dummy_data+0x38 ({{stack_node_data.bin_file}})
-{%- endif %}
+{%- endif -%}
 {%- if stack_node_data.file and stack_node_data.line_number %}
   {{stack_node_data.file}}:{{stack_node_data.line_number}}
 {%- elif stack_node_data.file %}
@@ -107,8 +107,8 @@ perf 209124 [000]  7006.226761:          1 {{stack_node_data_list.event}}:uk:
 {%- else %}
   dummy_data[112d8f]
 {%- endif %}
-{% endfor %}
 {%- endfor %}
+{% endfor %}
 {%- endfor %}
 ";
     tera.add_raw_template("perf_template.data", template_str)?;
