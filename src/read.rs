@@ -4,7 +4,6 @@ use crate::structs::StoData;
 use highway::{HighwayHash, HighwayHasher};
 // use rmp_serde::Deserializer;
 
-
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
