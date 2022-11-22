@@ -71,6 +71,8 @@ cmake-build-*/
 # File-based project format
 *.iws
 .idea
+cpu_perf.unsto.txt
+cpu_perf.sto.json
 # IntelliJ
 out/
 
