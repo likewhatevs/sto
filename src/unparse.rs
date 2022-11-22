@@ -2,8 +2,6 @@
 // process...
 // reconstruct flame-graphable data via a template.
 
-
-
 use std::path::PathBuf;
 // construct two indices on the data.
 // one vec sorted by node depth, one map keyed by IDs.
@@ -13,7 +11,7 @@ use std::path::PathBuf;
 // generate count of deepest child node entries of the template, using this chain.
 // discard the deepest child node, repeat until all nodes are processed.
 // feed the generated data into flamegraph and cross fingers that things look the same.
-use crate::structs::{StoData};
+use crate::structs::StoData;
 use serde_derive::{Deserialize, Serialize};
 use tera::{Context, Tera};
 
@@ -29,6 +27,7 @@ pub struct StackNodeDataTemplate {
     pub symbol: String,
     pub file: String,
     pub line_number: u32,
+    pub bin_file: String,
 }
 
 pub fn construct_template_data(
@@ -41,6 +40,7 @@ pub fn construct_template_data(
     depth_vec.sort_by_key(|x| x.depth);
     depth_vec.reverse();
     let mut node_map = sto.stack_nodes;
+    let mut data_map = sto.stack_node_datas;
     let mut results = Vec::new();
     while !depth_vec.is_empty() {
         let mut path = Vec::new();
@@ -51,15 +51,10 @@ pub fn construct_template_data(
             continue;
         }
         let leaf = StackNodeDataTemplate {
-            symbol: sto.stack_node_datas.get(&first.id).unwrap().clone().symbol,
-            file: sto
-                .stack_node_datas
-                .get(&first.id)
-                .clone()
-                .unwrap()
-                .clone()
-                .file,
-            line_number: sto.stack_node_datas.get(&first.id).unwrap().line_number,
+            symbol: data_map.get(&first.data_id).unwrap().clone().symbol,
+            file: data_map.get(&first.data_id).unwrap().clone().file,
+            line_number: data_map.get(&first.data_id).unwrap().line_number,
+            bin_file: data_map.get(&first.data_id).unwrap().clone().bin_file,
         };
         path.push(leaf);
         while parent != 0 {
@@ -70,30 +65,14 @@ pub fn construct_template_data(
             // copy to path
             let parent_node = node_map.get(&parent).unwrap();
             let parent_tmpl_data = StackNodeDataTemplate {
-                symbol: sto
-                    .stack_node_datas
-                    .get(&parent_node.id)
-                    .unwrap()
-                    .clone()
-                    .symbol,
-                file: sto
-                    .stack_node_datas
-                    .get(&parent_node.id)
-                    .clone()
-                    .unwrap()
-                    .clone()
-                    .file,
-                line_number: sto
-                    .stack_node_datas
-                    .get(&parent_node.id)
-                    .unwrap()
-                    .line_number,
+                symbol: data_map.get(&parent_node.data_id).unwrap().clone().symbol,
+                file: data_map.get(&parent_node.data_id).unwrap().clone().file,
+                line_number: data_map.get(&parent_node.data_id).unwrap().line_number,
+                bin_file: data_map.get(&parent_node.data_id).unwrap().clone().bin_file,
             };
             path.push(parent_tmpl_data);
             parent = parent_node.parent_id;
         }
-        // ok so now we are at the root, construct an object and invert the list
-        path.reverse();
         let template = StackNodeDataListTemplate {
             data_list: path.clone(),
             event: sto.profiled_binaries.values().next().unwrap().clone().event,
@@ -109,27 +88,29 @@ pub fn unparse_and_write(
     outfile: PathBuf,
 ) -> Result<(), anyhow::Error> {
     let mut tera = Tera::default();
-    let template_str = r#"""
-{% for stack_node_data_list in stack_node_data_lists %}
-{% for i in range(end=stack_node_data_list.count) %}
+    let template_str = "
+{%- for stack_node_data_list in stack_node_data_lists %}
+{%- for i in range(end=stack_node_data_list.count) %}
 perf 209124 [000]  7006.226761:          1 {{stack_node_data_list.event}}:uk:
-{% for stack_node_data in stack_node_data_list %}
-{% if stack_node_data.symbol %}
+{%- for stack_node_data in stack_node_data_list.data_list %}
+{%- if stack_node_data.symbol and stack_node_data.bin_file %}
+                  {{stack_node_data.symbol}}+0x9d ({{stack_node_data.bin_file}})
+{%- else if stack_node_data.symbol %}
         ffffffffb12d1f18 {{stack_node_data.symbol}}+0x38 ([kernel.kallsyms])
-{% else %}
-        ffffffffb140cbed dummy_data+0x9d ([kernel.kallsyms])
-{% endif %}
-{% if stack_node_data.file && stack_node_data.line_number %}
+{%- else if stack_node_data.bin_file %}
+        ffffffffb12d1f18 dummy_data+0x38 ({{stack_node_data.bin_file}})
+{%- endif %}
+{%- if stack_node_data.file and stack_node_data.line_number %}
   {{stack_node_data.file}}:{{stack_node_data.line_number}}
-{% elif stack_node_data.file %}
+{%- elif stack_node_data.file %}
   {{stack_node_data.file}}[112d8f]
-{% else %}
+{%- else %}
   dummy_data[112d8f]
-{% endif %}
+{%- endif %}
 {% endfor %}
-{% endfor %}
-{% endfor %}
-"""#;
+{%- endfor %}
+{%- endfor %}
+";
     tera.add_raw_template("perf_template.data", template_str)?;
     let mut context = Context::new();
     context.insert("stack_node_data_lists", &stack_node_data_lists);

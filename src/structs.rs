@@ -28,6 +28,7 @@ pub struct StackNodeData {
     pub id: u64,
     pub symbol: String,
     pub file: String,
+    pub bin_file: String,
     pub line_number: u32,
 }
 

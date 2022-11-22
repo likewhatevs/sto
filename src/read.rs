@@ -2,10 +2,10 @@ use crate::globals::{TaskQueue, HASHER_SEED, TASK_COUNT, WORKER_COUNT};
 use crate::parse::process_record;
 use crate::structs::StoData;
 use highway::{HighwayHash, HighwayHasher};
-use rmp_serde::Deserializer;
+// use rmp_serde::Deserializer;
 use serde::Deserialize;
 
-use std::path::{PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::File;
@@ -64,7 +64,8 @@ pub async fn read_sto(in_file: PathBuf) -> Result<StoData, anyhow::Error> {
     use std::io::BufReader;
     let mut infile = File::open(in_file)?;
     let bufreader = BufReader::new(&mut infile);
-    let mut de = Deserializer::new(bufreader);
-    let data_in: StoData = Deserialize::deserialize(&mut de)?;
+    // let mut de = Deserializer::new(bufreader);
+    // let data_in: StoData = Deserialize::deserialize(&mut de)?;
+    let mut data_in: StoData = serde_json::from_reader(bufreader)?;
     Ok(data_in)
 }

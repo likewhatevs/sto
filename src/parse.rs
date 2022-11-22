@@ -6,7 +6,6 @@ use highway::{HighwayHash, HighwayHasher};
 use lazy_static::lazy_static;
 use regex::Regex;
 
-
 lazy_static! {
     static ref HEADER_RE: Regex = Regex::new(
         r#"(?m)^.*\s+[0-9\-]+\s+\[[0-9]+\]\s+[0-9]+\.[0-9]+:\s+[0-9]+\s+(?P<event>.*?)[:].*$"#
@@ -118,6 +117,8 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
                         id: data_id,
                         symbol: symbol.clone(),
                         file: src_file,
+                        // sus.
+                        bin_file: bin_file.clone().unwrap(),
                         line_number: line_number.unwrap_or(0),
                     };
                     let stack_node = StackNode {
