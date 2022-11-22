@@ -5,7 +5,7 @@ use cached::SizedCache;
 use highway::{HighwayHash, HighwayHasher};
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::sync::Arc;
+
 
 lazy_static! {
     static ref HEADER_RE: Regex = Regex::new(

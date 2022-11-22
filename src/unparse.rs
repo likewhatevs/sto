@@ -2,8 +2,8 @@
 // process...
 // reconstruct flame-graphable data via a template.
 
-use std::collections::HashMap;
-use std::io::Write;
+
+
 use std::path::PathBuf;
 // construct two indices on the data.
 // one vec sorted by node depth, one map keyed by IDs.
@@ -13,7 +13,7 @@ use std::path::PathBuf;
 // generate count of deepest child node entries of the template, using this chain.
 // discard the deepest child node, repeat until all nodes are processed.
 // feed the generated data into flamegraph and cross fingers that things look the same.
-use crate::structs::{StackNodeData, StoData};
+use crate::structs::{StoData};
 use serde_derive::{Deserialize, Serialize};
 use tera::{Context, Tera};
 
@@ -32,10 +32,10 @@ pub struct StackNodeDataTemplate {
 }
 
 pub fn construct_template_data(
-    mut sto: StoData,
+    sto: StoData,
 ) -> Result<Vec<StackNodeDataListTemplate>, anyhow::Error> {
     let mut depth_vec = Vec::new();
-    for (a, b) in sto.stack_nodes.iter() {
+    for (_a, b) in sto.stack_nodes.iter() {
         depth_vec.push(b.clone());
     }
     depth_vec.sort_by_key(|x| x.depth);
@@ -133,8 +133,8 @@ perf 209124 [000]  7006.226761:          1 {{stack_node_data_list.event}}:uk:
     tera.add_raw_template("perf_template.data", template_str)?;
     let mut context = Context::new();
     context.insert("stack_node_data_lists", &stack_node_data_lists);
-    let mut file = std::fs::File::create(outfile)?;
-    let mut buf = std::io::BufWriter::new(file);
+    let file = std::fs::File::create(outfile)?;
+    let buf = std::io::BufWriter::new(file);
     tera.render_to("perf_template.data", &context, buf)?;
     Ok(())
 }

@@ -4,12 +4,12 @@ use crate::structs::StoData;
 use highway::{HighwayHash, HighwayHasher};
 use rmp_serde::Deserializer;
 use serde::Deserialize;
-use std::io::Cursor;
-use std::path::{Path, PathBuf};
+
+use std::path::{PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::File;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time;
 
 pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<(), anyhow::Error> {
@@ -63,7 +63,7 @@ pub async fn read_sto(in_file: PathBuf) -> Result<StoData, anyhow::Error> {
     use std::fs::File;
     use std::io::BufReader;
     let mut infile = File::open(in_file)?;
-    let mut bufreader = BufReader::new(&mut infile);
+    let bufreader = BufReader::new(&mut infile);
     let mut de = Deserializer::new(bufreader);
     let data_in: StoData = Deserialize::deserialize(&mut de)?;
     Ok(data_in)

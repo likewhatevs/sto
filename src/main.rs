@@ -11,7 +11,7 @@ use crate::read::{read_perf, read_sto};
 use crate::unparse::{construct_template_data, unparse_and_write};
 use crate::write::write_sto;
 use clap::Parser;
-use log::error;
+
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
