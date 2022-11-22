@@ -1,7 +1,7 @@
 # STO
 ## store things, optimized
 
-*very wip readme and everything, but it does work*
+# !!! this is wip and (look at the flamegraphs...) does not really work yet (either due to a bug in output formatting or intput parsing)!!!
 
 This repo is a demonstrates a way to store profiler data that we have found to scale well.
 
