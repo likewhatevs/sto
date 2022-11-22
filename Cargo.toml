@@ -24,6 +24,7 @@ tokio = { version = "1.22.0", features = ["full"] }
 once_cell = "1.16.0"
 serde_derive = "1.0.147"
 clap = { version = "4.0.26", features = ["derive"] }
+tera = "1.17.1"
 
 [profile.release]
 lto = true

@@ -7,8 +7,9 @@ mod structs;
 mod unparse;
 mod write;
 
-use crate::read::read;
-use crate::write::write;
+use crate::read::{read_perf, read_sto};
+use crate::unparse::{construct_template_data, unparse_and_write};
+use crate::write::write_sto;
 use clap::Parser;
 use log::error;
 use std::path::PathBuf;
@@ -33,10 +34,9 @@ struct Cli {
     #[arg(
         short,
         long,
-        help = "if true, sto perf data. if false, unsto sto data into perf.",
-        required = true
+        help = "if present, unsto perf data. if absent, make sto data from perf data."
     )]
-    sto: bool,
+    unsto: bool,
 }
 
 #[tokio::main]
@@ -47,12 +47,15 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let in_file = cli.input_file;
     let out_file = cli.output_file;
-    let mode = cli.sto;
+    let unsto = cli.unsto;
     let binary_identifier = cli.binary_identifier;
-    if mode {
-        read(in_file, binary_identifier).await?;
-        write().await?;
+    if !unsto {
+        read_perf(in_file, binary_identifier).await?;
+        write_sto(out_file).await?;
     } else {
+        let sto = read_sto(in_file).await?;
+        let template_data = construct_template_data(sto)?;
+        unparse_and_write(template_data, out_file)?;
     }
 
     Ok(())

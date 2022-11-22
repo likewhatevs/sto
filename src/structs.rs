@@ -1,13 +1,13 @@
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StackTrace {
     pub event: String,
     pub stack_node_datas: Vec<StackNodeData>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct StoData {
     pub stack_nodes: HashMap<u64, StackNode>,
     pub stack_node_datas: HashMap<u64, StackNodeData>,
@@ -28,6 +28,7 @@ pub struct StackNodeData {
     pub id: u64,
     pub symbol: String,
     pub file: String,
+    pub line_number: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
