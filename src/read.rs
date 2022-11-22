@@ -3,7 +3,7 @@ use crate::parse::process_record;
 use crate::structs::StoData;
 use highway::{HighwayHash, HighwayHasher};
 // use rmp_serde::Deserializer;
-use serde::Deserialize;
+
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -49,7 +49,7 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
             }
             buf.clear();
         } else {
-            buf.push(format!("{}", line));
+            buf.push(line.to_string());
         }
     }
 
@@ -66,6 +66,6 @@ pub async fn read_sto(in_file: PathBuf) -> Result<StoData, anyhow::Error> {
     let bufreader = BufReader::new(&mut infile);
     // let mut de = Deserializer::new(bufreader);
     // let data_in: StoData = Deserialize::deserialize(&mut de)?;
-    let mut data_in: StoData = serde_json::from_reader(bufreader)?;
+    let data_in: StoData = serde_json::from_reader(bufreader)?;
     Ok(data_in)
 }

@@ -40,7 +40,7 @@ pub fn construct_template_data(
     depth_vec.sort_by_key(|x| x.depth);
     depth_vec.reverse();
     let mut node_map = sto.stack_nodes;
-    let mut data_map = sto.stack_node_datas;
+    let data_map = sto.stack_node_datas;
     let mut results = Vec::new();
     while !depth_vec.is_empty() {
         let mut path = Vec::new();
@@ -80,7 +80,7 @@ pub fn construct_template_data(
         };
         results.push(template);
     }
-    return Ok(results);
+    Ok(results)
 }
 
 pub fn unparse_and_write(

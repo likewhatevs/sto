@@ -2,7 +2,7 @@ use crate::globals::{BINARIES, DATAS, NODES};
 use crate::structs::StoData;
 // use rmp_serde as rmps;
 // use rmps::Serializer;
-use serde::Serialize;
+
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
@@ -27,7 +27,7 @@ pub async fn write_sto(out_file: PathBuf) -> Result<(), anyhow::Error> {
     // data_out
     //     .serialize(&mut Serializer::new(&mut outbuf))
     //     .unwrap();
-    let mut outbuf = serde_json::to_vec(&mut data_out)?;
+    let outbuf = serde_json::to_vec(&mut data_out)?;
     // outbuf.write_all(&*serde_json::to_vec(&mut data_out)?);
     let outfile = File::create(out_file).await?;
     let mut bufwriter = BufWriter::new(outfile);

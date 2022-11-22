@@ -72,7 +72,7 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
             .map(|x| x.as_str().into());
         let profiled_binary = ProfiledBinary {
             id: root_id,
-            identifier: identifier.clone(),
+            identifier,
             event: event.unwrap(),
         };
         BINARIES
