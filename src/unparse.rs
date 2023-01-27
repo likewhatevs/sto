@@ -2,6 +2,7 @@
 // process...
 // reconstruct flame-graphable data via a template.
 
+use std::os::unix::process::parent_id;
 use std::path::PathBuf;
 // construct two indices on the data.
 // one vec sorted by node depth, one map keyed by IDs.
@@ -58,12 +59,12 @@ pub fn construct_template_data(
         };
         path.push(leaf);
         while parent != 0 {
-            log::error!("here");
             // decrement
             node_map
                 .entry(parent)
                 .and_modify(|x| x.occurrences -= first_count);
             // copy to path
+            log::error!("{:?}", parent);
             let parent_node = node_map.get(&parent).unwrap();
             let parent_tmpl_data = StackNodeDataTemplate {
                 symbol: data_map.get(&parent_node.data_id).unwrap().clone().symbol,
