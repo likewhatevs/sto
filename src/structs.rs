@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use dashmap::DashMap;
 use serde_derive::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]

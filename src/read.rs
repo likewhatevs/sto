@@ -1,13 +1,12 @@
 use crate::globals::{TaskQueue, HASHER_SEED, TASK_COUNT, WORKER_COUNT};
 use crate::parse::process_record;
-use crate::structs::{MapStoData, StoData};
+use crate::structs::MapStoData;
 use highway::{HighwayHash, HighwayHasher};
 
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use crate::unparse::MapStoData;
 
 pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<(), anyhow::Error> {
     let file = File::open(in_file).await?;

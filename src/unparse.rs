@@ -2,7 +2,6 @@
 // process...
 // reconstruct flame-graphable data via a template.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 // construct two indices on the data.
 // one vec sorted by node depth, one map keyed by IDs.
@@ -12,7 +11,7 @@ use std::path::PathBuf;
 // generate count of deepest child node entries of the template, using this chain.
 // discard the deepest child node, repeat until all nodes are processed.
 // feed the generated data into flamegraph and cross fingers that things look the same.
-use crate::structs::{MapStoData, ProfiledBinary, StackNode, StackNodeData, StoData};
+use crate::structs::{MapStoData, StackNode};
 use serde_derive::{Deserialize, Serialize};
 use tera::{Context, Tera};
 
@@ -33,7 +32,6 @@ pub struct StackNodeDataTemplate {
 pub fn construct_template_data(
     sto: MapStoData,
 ) -> Result<Vec<StackNodeDataListTemplate>, anyhow::Error> {
-
     let mut depth_vec: Vec<StackNode> = Vec::new();
     for (_a, b) in sto.stack_nodes.iter() {
         depth_vec.push(b.clone());
@@ -41,7 +39,7 @@ pub fn construct_template_data(
     depth_vec.sort_by_key(|x| x.depth);
     depth_vec.reverse();
     let mut node_map = sto.stack_nodes;
-    let mut data_map = sto.stack_node_datas;
+    let data_map = sto.stack_node_datas;
     let mut results = Vec::new();
     while !depth_vec.is_empty() {
         let mut path = Vec::new();
@@ -81,7 +79,7 @@ pub fn construct_template_data(
         };
         results.push(template);
     }
-    return Ok(results);
+    Ok(results)
 }
 
 pub fn unparse_and_write(
