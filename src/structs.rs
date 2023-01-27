@@ -31,6 +31,7 @@ pub struct ProfiledBinary {
     pub id: u64,
     pub identifier: String,
     pub event: String,
+    pub total_samples: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

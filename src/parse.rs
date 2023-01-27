@@ -95,6 +95,7 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
                                 id: root_id,
                                 identifier: identifier.clone(),
                                 event: event.unwrap(),
+                                total_samples: 1,
                             };
                             BINARIES.clone().entry(pb.id).or_insert(pb.clone());
                         }
@@ -146,7 +147,7 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
                     let mut tmp_list_node = Vec::new();
                     let mut tmp_list_data = Vec::new();
                     for (depth, i) in reversed_stack.clone().into_iter().enumerate() {
-                        if !i.symbol.is_some() {
+                        if i.symbol.is_none() {
                             tmp_list_node.clear();
                             tmp_list_data.clear();
                             break;
@@ -177,7 +178,7 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
                         tmp_list_node.push(stack_node);
                         parent_id = node_id;
                     }
-                    for stack_node in tmp_list_node{
+                    for stack_node in tmp_list_node.clone(){
                         NODES
                             .clone()
                             .entry(stack_node.id)
@@ -190,6 +191,9 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
                             .clone()
                             .entry(stack_node_data.id)
                             .or_insert(stack_node_data);
+                    }
+                    if !tmp_list_node.is_empty(){
+                        BINARIES.clone().entry(root_id).and_modify(|x| x.total_samples += 1);
                     }
                     state = State::Header;
                 }
