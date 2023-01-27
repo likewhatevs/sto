@@ -35,6 +35,7 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
 
     while let Some(line) = lines.next_line().await? {
         if line.is_empty() {
+            buf.push(line.to_string());
             let mut done = false;
             while !done {
                 match queue.try_push(buf.clone()) {
@@ -43,8 +44,7 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
                         done = true;
                     }
                 }
-                // noop 10 ms sleep.
-                time::sleep(Duration::from_millis(10)).await;
+                time::sleep(Duration::from_nanos(5)).await;
             }
             buf.clear();
         } else {
@@ -53,7 +53,7 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
     }
 
     while !queue.is_empty() {
-        time::sleep(Duration::from_millis(10)).await;
+        time::sleep(Duration::from_nanos(5)).await;
     }
     Ok(())
 }
