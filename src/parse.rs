@@ -11,7 +11,7 @@ lazy_static! {
     // https://github.com/spiermar/burn/blob/master/convert/perf.go
     // thx!
     static ref HEADER_EVENT_RE: Regex = Regex::new(
-        r#"^\S.+?\s+\d+\d*\s+[^\s]+?\s+[^\s]+?\s+[^\s]?\s+(?P<event>[^:]+):.*$"#
+        r#"^\S.+?\s+\d+\d*\s+[^\s]+?\s+[^\s]+?\s+[^\s]?\s+(?P<event>[^:\s]+):.*$"#
     )
     .unwrap();
     static ref SYMBOL_BIN_RE: Regex =
