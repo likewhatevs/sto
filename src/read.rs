@@ -6,6 +6,7 @@ use highway::{HighwayHash, HighwayHasher};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use atomic_counter::{AtomicCounter, ConsistentCounter};
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time;
@@ -20,15 +21,21 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
     let mut lines = buf_reader.lines();
     let mut buf: Vec<String> = Vec::new();
     let queue = queue.clone();
-    let mut handles = vec![];
-
+    let start_rc = Arc::new(ConsistentCounter::new(0));
+    let done_rc = Arc::new(ConsistentCounter::new(0));
     for _a in 1..WORKER_COUNT {
         let q_ref = queue.clone();
         let binary_identifier = binary_identifier.clone();
-        handles.push(tokio::spawn(async move {
-            let data_chunk = q_ref.pop().await;
-            process_record(data_chunk, root_id, binary_identifier.clone()).await
-        }));
+        let start_rc_ref = start_rc.clone();
+        let done_rc_ref = done_rc.clone();
+        tokio::spawn(async move {
+            loop {
+                let data_chunk = q_ref.pop().await;
+                start_rc_ref.inc();
+                process_record(data_chunk, root_id, binary_identifier.clone()).await;
+                done_rc_ref.inc();
+            }
+        });
     }
 
     while let Some(line) = lines.next_line().await? {
@@ -38,6 +45,7 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
             while !done {
                 match queue.try_push(buf.clone()) {
                     Err(_x) => {
+                        time::sleep(Duration::from_millis(1)).await;
                     },
                     Ok(_x) => {
                         done = true;
@@ -50,7 +58,9 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
         }
     }
 
-    futures::future::join_all(handles).await;
+    while !queue.is_empty() || start_rc.get() != done_rc.get() {
+        time::sleep(Duration::from_millis(1)).await;
+    }
 
     Ok(())
 }
