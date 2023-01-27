@@ -2,14 +2,11 @@ use crate::globals::{TaskQueue, HASHER_SEED, TASK_COUNT, WORKER_COUNT};
 use crate::parse::process_record;
 use crate::structs::StoData;
 use highway::{HighwayHash, HighwayHasher};
-// use rmp_serde::Deserializer;
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::time;
 
 pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<(), anyhow::Error> {
     let file = File::open(in_file).await?;
@@ -51,9 +48,7 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
         }
     }
 
-    while !queue.is_empty() {
-
-    }
+    while !queue.is_empty() {}
     Ok(())
 }
 
