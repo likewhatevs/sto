@@ -5,8 +5,10 @@ use highway::{HighwayHash, HighwayHasher};
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::time;
 
 pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<(), anyhow::Error> {
     let file = File::open(in_file).await?;
@@ -36,7 +38,9 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
             let mut done = false;
             while !done {
                 match queue.try_push(buf.clone()) {
-                    Err(_x) => (),
+                    Err(_x) => {
+                        let _ = time::sleep(Duration::from_millis(1)).await;
+                    },
                     Ok(_x) => {
                         done = true;
                     }
