@@ -73,7 +73,12 @@ pub fn construct_template_data(
                 bin_file: data_map.get(&parent_node.data_id).unwrap().clone().bin_file,
             };
             path.push(parent_tmpl_data);
-            parent = parent_node.parent_id;
+            if parent_node.parent_id == parent {
+                log::warn!("tossing some data due to cycle");
+                break;
+            } else {
+                parent = parent_node.parent_id;
+            }
         }
         let template = StackNodeDataListTemplate {
             data_list: path.clone(),
