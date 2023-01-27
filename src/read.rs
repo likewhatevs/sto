@@ -44,7 +44,7 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
                     }
                 }
                 // noop 10 ms sleep.
-                let _ = time::sleep(Duration::from_millis(10));
+                time::sleep(Duration::from_millis(10)).await;
             }
             buf.clear();
         } else {
@@ -53,7 +53,7 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
     }
 
     while !queue.is_empty() {
-        let _ = time::sleep(Duration::from_millis(10));
+        time::sleep(Duration::from_millis(10)).await;
     }
     Ok(())
 }

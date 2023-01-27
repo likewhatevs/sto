@@ -34,12 +34,12 @@ pub fn construct_template_data(
     sto: StoData,
 ) -> Result<Vec<StackNodeDataListTemplate>, anyhow::Error> {
     let mut depth_vec = Vec::new();
-    for (_a, b) in sto.stack_nodes.iter() {
-        depth_vec.push(b.clone());
+    for it in sto.stack_nodes.iter() {
+        depth_vec.push(it.value().clone());
     }
     depth_vec.sort_by_key(|x| x.depth);
     depth_vec.reverse();
-    let mut node_map = sto.stack_nodes;
+    let node_map = sto.stack_nodes;
     let data_map = sto.stack_node_datas;
     let mut results = Vec::new();
     while !depth_vec.is_empty() {
@@ -75,7 +75,7 @@ pub fn construct_template_data(
         }
         let template = StackNodeDataListTemplate {
             data_list: path.clone(),
-            event: sto.profiled_binaries.values().next().unwrap().clone().event,
+            event: sto.profiled_binaries.clone().iter().next().unwrap().clone().event,
             count: first_count,
         };
         results.push(template);

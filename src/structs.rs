@@ -1,5 +1,6 @@
 use serde_derive::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::sync::Arc;
+use dashmap::DashMap;
 
 #[derive(Debug, Clone)]
 pub struct StackTrace {
@@ -9,9 +10,9 @@ pub struct StackTrace {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct StoData {
-    pub stack_nodes: HashMap<u64, StackNode>,
-    pub stack_node_datas: HashMap<u64, StackNodeData>,
-    pub profiled_binaries: HashMap<u64, ProfiledBinary>,
+    pub stack_nodes: Arc<DashMap<u64, StackNode>>,
+    pub stack_node_datas: Arc<DashMap<u64, StackNodeData>>,
+    pub profiled_binaries: Arc<DashMap<u64, ProfiledBinary>>,
 }
 
 // perf script does not emit build id
