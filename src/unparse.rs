@@ -91,7 +91,7 @@ pub fn unparse_and_write(
     let mut tera = Tera::default();
     let template_str = "
 {%- for stack_node_data_list in stack_node_data_lists %}
-{%- for i in range(end=stack_node_data_list.count) %-}
+{%- for i in range(end=stack_node_data_list.count) -%}
 perf 209124 [000]  7006.226761:          1 {{stack_node_data_list.event}}:uk:
 {%- for stack_node_data in stack_node_data_list.data_list %}
 {%- if stack_node_data.symbol and stack_node_data.bin_file %}
