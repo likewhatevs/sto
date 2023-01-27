@@ -96,12 +96,10 @@ pub fn unparse_and_write(
 {%- elif stack_node_data.symbol %}
         ffffffffb12d1f18 {{stack_node_data.symbol}} ([kernel.kallsyms])
 {%- endif %}
-{%- if stack_node_data.file and stack_node_data.line_number %}
-  {{stack_node_data.file}}:{{stack_node_data.line_number}}
-{%- elif stack_node_data.file %}
+{%- if stack_node_data.file %}
   {{stack_node_data.file}}[112d8f]
 {%- else %}
-  dummy_data[112d8f]
+  [dummy_data][112d8f]
 {%- endif %}
 {%- endfor %}
 
