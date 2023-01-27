@@ -42,6 +42,7 @@ struct Cli {
     #[arg(
         short,
         long,
+        default_value_t = String::from(""),
         help = "if present, write parsed data to provided postgresql."
     )]
     postgres: String,
