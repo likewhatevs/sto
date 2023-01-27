@@ -156,9 +156,9 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
                         let stack_node_data = StackNodeData {
                             id: data_id,
                             // sus.
-                            symbol: i.symbol.clone().unwrap(),
-                            file: i.src_file.clone().unwrap(),
-                            bin_file: i.bin_file.clone().unwrap(),
+                            symbol: i.symbol.clone().unwrap_or("".into()),
+                            file: i.src_file.clone().unwrap_or("".into()),
+                            bin_file: i.bin_file.clone().unwrap_or("".into()),
                             line_number: i.line_number.unwrap_or(0),
                         };
                         let stack_node = StackNode {
