@@ -42,7 +42,7 @@ pub struct MapStoData {
 pub fn construct_template_data(
     i_sto: StoData,
 ) -> Result<Vec<StackNodeDataListTemplate>, anyhow::Error> {
-    // this fixes some weirdness w/ tera
+    // this fixes some weirdness w/ tera, maybe?
     let sto = MapStoData {
         stack_node_datas: HashMap::from_iter(
             i_sto.stack_node_datas.clone().iter().map(|x| (*x.key(), x.value().clone())),
@@ -59,13 +59,13 @@ pub fn construct_template_data(
     };
 
         let mut depth_vec: Vec<StackNode> = Vec::new();
-    for it in sto.stack_nodes.values() {
-        depth_vec.push(it.clone());
+    for (_a, b) in sto.stack_nodes.iter() {
+        depth_vec.push(b.clone());
     }
     depth_vec.sort_by_key(|x| x.depth);
     depth_vec.reverse();
     let mut node_map = sto.stack_nodes;
-    let data_map = sto.stack_node_datas;
+    let mut data_map = sto.stack_node_datas;
     let mut results = Vec::new();
     while !depth_vec.is_empty() {
         let mut path = Vec::new();
@@ -100,19 +100,12 @@ pub fn construct_template_data(
         }
         let template = StackNodeDataListTemplate {
             data_list: path.clone(),
-            event: sto
-                .profiled_binaries
-                .clone()
-                .values()
-                .next()
-                .unwrap()
-                .clone()
-                .event,
+            event: sto.profiled_binaries.values().next().unwrap().clone().event,
             count: first_count,
         };
         results.push(template);
     }
-    Ok(results)
+    return Ok(results);
 }
 
 pub fn unparse_and_write(
