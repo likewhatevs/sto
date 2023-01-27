@@ -143,8 +143,12 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
                 State::End => {
                     reversed_stack.reverse();
                     let mut parent_id = 0;
+                    let mut tmp_list_node = Vec::new();
+                    let mut tmp_list_data = Vec::new();
                     for (depth, i) in reversed_stack.clone().into_iter().enumerate() {
                         if !i.symbol.is_some() {
+                            tmp_list_node.clear();
+                            tmp_list_data.clear();
                             break;
                         }
                         let data_id = get_data_id(
@@ -169,16 +173,23 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
                             occurrences: 1,
                             depth: u32::try_from(depth).unwrap(),
                         };
+                        tmp_list_data.push(stack_node_data);
+                        tmp_list_node.push(stack_node);
+                        parent_id = node_id;
+                    }
+                    for stack_node in tmp_list_node{
                         NODES
                             .clone()
                             .entry(stack_node.id)
                             .and_modify(|x| x.occurrences += 1)
                             .or_insert(stack_node);
+
+                    }
+                    for stack_node_data in tmp_list_data{
                         DATAS
                             .clone()
                             .entry(stack_node_data.id)
                             .or_insert(stack_node_data);
-                        parent_id = node_id;
                     }
                     state = State::Header;
                 }
