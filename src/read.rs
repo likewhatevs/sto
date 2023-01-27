@@ -44,7 +44,6 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
                         done = true;
                     }
                 }
-                time::sleep(Duration::from_millis(5)).await;
             }
             buf.clear();
         } else {
@@ -53,7 +52,7 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
     }
 
     while !queue.is_empty() {
-        time::sleep(Duration::from_nanos(5)).await;
+
     }
     Ok(())
 }
