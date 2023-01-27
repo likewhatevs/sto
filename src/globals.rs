@@ -4,8 +4,8 @@ use highway::Key;
 use once_cell::sync::Lazy;
 use std::sync::Arc;
 
-pub const TASK_COUNT: usize = 1000;
-pub const WORKER_COUNT: usize = 100;
+pub const TASK_COUNT: usize = 50;
+pub const WORKER_COUNT: usize = 10;
 pub type TaskQueue = deadqueue::limited::Queue<Vec<String>>;
 pub const HASHER_SEED: Key = Key([1, 2, 3, 4]);
 pub static NODES: Lazy<Arc<DashMap<u64, StackNode>>> = Lazy::new(|| Arc::new(DashMap::new()));
