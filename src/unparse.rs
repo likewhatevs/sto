@@ -88,6 +88,7 @@ pub fn unparse_and_write(
 ) -> Result<(), anyhow::Error> {
     log::error!("templating");
     let mut tera = Tera::default();
+    log::error!("{:?}", stack_node_data_lists.len());
     let template_str = "
 {%- for stack_node_data_list in stack_node_data_lists -%}
 {%- for i in range(end=stack_node_data_list.count) -%}
