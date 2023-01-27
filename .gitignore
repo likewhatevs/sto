@@ -9,6 +9,7 @@ cpu_perf.txt
 mem_perf.txt
 perf.data.old
 perf.data
+*.txt
 target
 test.unsto.txt
 test.sto.json
