@@ -2,7 +2,7 @@
 // process...
 // reconstruct flame-graphable data via a template.
 
-use std::os::unix::process::parent_id;
+use std::collections::HashMap;
 use std::path::PathBuf;
 // construct two indices on the data.
 // one vec sorted by node depth, one map keyed by IDs.
@@ -12,7 +12,7 @@ use std::path::PathBuf;
 // generate count of deepest child node entries of the template, using this chain.
 // discard the deepest child node, repeat until all nodes are processed.
 // feed the generated data into flamegraph and cross fingers that things look the same.
-use crate::structs::{StackNode, StoData};
+use crate::structs::{ProfiledBinary, StackNode, StackNodeData, StoData};
 use serde_derive::{Deserialize, Serialize};
 use tera::{Context, Tera};
 
@@ -31,17 +31,41 @@ pub struct StackNodeDataTemplate {
     pub bin_file: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MapStoData {
+    pub stack_nodes: HashMap<u64, StackNode>,
+    pub stack_node_datas: HashMap<u64, StackNodeData>,
+    pub profiled_binaries: HashMap<u64, ProfiledBinary>,
+}
+
+
 pub fn construct_template_data(
-    sto: StoData,
+    i_sto: StoData,
 ) -> Result<Vec<StackNodeDataListTemplate>, anyhow::Error> {
-    let mut depth_vec: Vec<StackNode> = Vec::new();
-    for it in sto.stack_nodes.iter() {
-        depth_vec.push(it.value().clone());
+    // this fixes some weirdness w/ tera
+    let sto = MapStoData {
+        stack_node_datas: HashMap::from_iter(
+            i_sto.stack_node_datas.clone().iter().map(|x| (*x.key(), x.value().clone())),
+        ),
+        stack_nodes: HashMap::from_iter(
+            i_sto.stack_nodes.clone().iter().map(|x| (*x.key(), x.value().clone())),
+        ),
+        profiled_binaries: HashMap::from_iter(
+            i_sto.profiled_binaries
+                .clone()
+                .iter()
+                .map(|x| (*x.key(), x.value().clone())),
+        ),
+    };
+
+        let mut depth_vec: Vec<StackNode> = Vec::new();
+    for it in sto.stack_nodes.values() {
+        depth_vec.push(it.clone());
     }
     depth_vec.sort_by_key(|x| x.depth);
     depth_vec.reverse();
-    let node_map = sto.stack_nodes.clone();
-    let data_map = sto.stack_node_datas.clone();
+    let mut node_map = sto.stack_nodes;
+    let data_map = sto.stack_node_datas;
     let mut results = Vec::new();
     while !depth_vec.is_empty() {
         let mut path = Vec::new();
@@ -64,7 +88,6 @@ pub fn construct_template_data(
                 .entry(parent)
                 .and_modify(|x| x.occurrences -= first_count);
             // copy to path
-            log::error!("{:?}", parent);
             let parent_node = node_map.get(&parent).unwrap();
             let parent_tmpl_data = StackNodeDataTemplate {
                 symbol: data_map.get(&parent_node.data_id).unwrap().clone().symbol,
@@ -73,19 +96,14 @@ pub fn construct_template_data(
                 bin_file: data_map.get(&parent_node.data_id).unwrap().clone().bin_file,
             };
             path.push(parent_tmpl_data);
-            if parent_node.parent_id == parent {
-                log::warn!("tossing some data due to cycle");
-                break;
-            } else {
-                parent = parent_node.parent_id;
-            }
+            parent = parent_node.parent_id;
         }
         let template = StackNodeDataListTemplate {
             data_list: path.clone(),
             event: sto
                 .profiled_binaries
                 .clone()
-                .iter()
+                .values()
                 .next()
                 .unwrap()
                 .clone()
