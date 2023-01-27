@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use dashmap::DashMap;
 use serde_derive::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -13,6 +14,14 @@ pub struct StoData {
     pub stack_nodes: Arc<DashMap<u64, StackNode>>,
     pub stack_node_datas: Arc<DashMap<u64, StackNodeData>>,
     pub profiled_binaries: Arc<DashMap<u64, ProfiledBinary>>,
+}
+
+// fix issue w/ tera.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MapStoData {
+    pub stack_nodes: HashMap<u64, StackNode>,
+    pub stack_node_datas: HashMap<u64, StackNodeData>,
+    pub profiled_binaries: HashMap<u64, ProfiledBinary>,
 }
 
 // perf script does not emit build id

@@ -12,7 +12,7 @@ use std::path::PathBuf;
 // generate count of deepest child node entries of the template, using this chain.
 // discard the deepest child node, repeat until all nodes are processed.
 // feed the generated data into flamegraph and cross fingers that things look the same.
-use crate::structs::{ProfiledBinary, StackNode, StackNodeData, StoData};
+use crate::structs::{MapStoData, ProfiledBinary, StackNode, StackNodeData, StoData};
 use serde_derive::{Deserialize, Serialize};
 use tera::{Context, Tera};
 
@@ -30,33 +30,9 @@ pub struct StackNodeDataTemplate {
     pub line_number: u32,
     pub bin_file: String,
 }
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct MapStoData {
-    pub stack_nodes: HashMap<u64, StackNode>,
-    pub stack_node_datas: HashMap<u64, StackNodeData>,
-    pub profiled_binaries: HashMap<u64, ProfiledBinary>,
-}
-
-
 pub fn construct_template_data(
-    i_sto: StoData,
+    sto: MapStoData,
 ) -> Result<Vec<StackNodeDataListTemplate>, anyhow::Error> {
-    // this fixes some weirdness w/ tera, maybe?
-    let sto = MapStoData {
-        stack_node_datas: HashMap::from_iter(
-            i_sto.stack_node_datas.clone().iter().map(|x| (*x.key(), x.value().clone())),
-        ),
-        stack_nodes: HashMap::from_iter(
-            i_sto.stack_nodes.clone().iter().map(|x| (*x.key(), x.value().clone())),
-        ),
-        profiled_binaries: HashMap::from_iter(
-            i_sto.profiled_binaries
-                .clone()
-                .iter()
-                .map(|x| (*x.key(), x.value().clone())),
-        ),
-    };
 
     let mut depth_vec: Vec<StackNode> = Vec::new();
     for (_a, b) in sto.stack_nodes.iter() {
@@ -103,7 +79,6 @@ pub fn construct_template_data(
             event: sto.profiled_binaries.values().next().unwrap().clone().event,
             count: first_count,
         };
-        log::error!("pushing results;");
         results.push(template);
     }
     return Ok(results);
