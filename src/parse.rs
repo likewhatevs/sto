@@ -70,7 +70,6 @@ struct RawData {
 }
 
 pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String) {
-    let mut profiled_binary: Option<ProfiledBinary> = None;
     let mut this_raw_data = RawData {
         ..Default::default()
     };
@@ -85,20 +84,20 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
             match state {
                 State::Header => {
                     reversed_stack.clear();
-                    if profiled_binary.is_none() {
+                    if BINARIES.clone().is_empty() {
                         let caps = HEADER_EVENT_RE
                             .captures(row)
                             .ok_or_else(|| log::error!("header {:#?}", row))
-                            .ok()
-                            .unwrap();
-                        let event = caps.name("event").map(|x| x.as_str().into());
-                        let pb = ProfiledBinary {
-                            id: root_id,
-                            identifier: identifier.clone(),
-                            event: event.unwrap(),
-                        };
-                        BINARIES.clone().entry(pb.id).or_insert(pb.clone());
-                        profiled_binary = Some(pb);
+                            .ok();
+                        if let Some(capture) = caps {
+                            let event = capture.name("event").map(|x| x.as_str().into());
+                            let pb = ProfiledBinary {
+                                id: root_id,
+                                identifier: identifier.clone(),
+                                event: event.unwrap(),
+                            };
+                            BINARIES.clone().entry(pb.id).or_insert(pb.clone());
+                        }
                     }
                     state = State::Symbol;
                 }
