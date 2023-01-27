@@ -58,6 +58,7 @@ pub fn construct_template_data(
         };
         path.push(leaf);
         while parent != 0 {
+            log::error!("here");
             // decrement
             node_map
                 .entry(parent)
