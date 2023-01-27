@@ -1,4 +1,4 @@
-cargo-features = ["profile-rustflags"]
+#cargo-features = ["profile-rustflags"]
 
 [package]
 name = "sto"
@@ -31,6 +31,6 @@ tera = "1.17.1"
 lto = true
 opt-level = 3
 codegen-units = 1
-rustflags = ["-Ctarget-cpu=native"]
+# rustflags = ["-Ctarget-cpu=native"]
 #, "-Z tune-cpu=machine"]
 

@@ -1,5 +1,3 @@
-#![feature(is_some_and)]
-
 mod globals;
 mod parse;
 mod read;
