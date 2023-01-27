@@ -106,9 +106,7 @@ pub fn unparse_and_write(
   dummy_data[112d8f]
 {%- endif %}
 {%- endfor %}
-{%- endfor %}
-{%- endfor %}
-
+{% endfor %}{% endfor %}
 ";
     tera.add_raw_template("perf_template.data", template_str)?;
     let mut context = Context::new();
