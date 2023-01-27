@@ -11,7 +11,7 @@ use std::path::PathBuf;
 // generate count of deepest child node entries of the template, using this chain.
 // discard the deepest child node, repeat until all nodes are processed.
 // feed the generated data into flamegraph and cross fingers that things look the same.
-use crate::structs::StoData;
+use crate::structs::{StackNode, StoData};
 use serde_derive::{Deserialize, Serialize};
 use tera::{Context, Tera};
 
@@ -33,14 +33,14 @@ pub struct StackNodeDataTemplate {
 pub fn construct_template_data(
     sto: StoData,
 ) -> Result<Vec<StackNodeDataListTemplate>, anyhow::Error> {
-    let mut depth_vec = Vec::new();
+    let mut depth_vec: Vec<StackNode> = Vec::new();
     for it in sto.stack_nodes.iter() {
         depth_vec.push(it.value().clone());
     }
     depth_vec.sort_by_key(|x| x.depth);
     depth_vec.reverse();
-    let node_map = sto.stack_nodes;
-    let data_map = sto.stack_node_datas;
+    let node_map = sto.stack_nodes.clone();
+    let data_map = sto.stack_node_datas.clone();
     let mut results = Vec::new();
     while !depth_vec.is_empty() {
         let mut path = Vec::new();
