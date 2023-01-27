@@ -144,6 +144,9 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
                     reversed_stack.reverse();
                     let mut parent_id = 0;
                     for (depth, i) in reversed_stack.clone().into_iter().enumerate() {
+                        if !i.symbol.is_some() {
+                            break;
+                        }
                         let data_id = get_data_id(
                             i.symbol.clone(),
                             i.src_file.clone(),
@@ -151,11 +154,10 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
                             i.bin_file.clone(),
                         );
                         let node_id = get_node_id(parent_id, data_id, root_id);
-
                         let stack_node_data = StackNodeData {
                             id: data_id,
                             // sus.
-                            symbol: i.symbol.clone().unwrap_or("".into()),
+                            symbol: i.symbol.clone().unwrap(),
                             file: i.src_file.clone().unwrap_or("".into()),
                             bin_file: i.bin_file.clone().unwrap_or("".into()),
                             line_number: i.line_number.unwrap_or(0),
