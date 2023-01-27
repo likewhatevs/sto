@@ -89,9 +89,7 @@ pub fn unparse_and_write(
     outfile: PathBuf,
 ) -> Result<(), anyhow::Error> {
     let mut tera = Tera::default();
-    let template_str = "{% for stack_node_data_list in stack_node_data_lists %}
-{%- for i in range(end=stack_node_data_list.count) %}
-perf 209124 [000]  7006.226761:          1 {{stack_node_data_list.event}}:uk:
+    let template_str = "{% for stack_node_data_list in stack_node_data_lists %}{% for i in range(end=stack_node_data_list.count) %}perf 209124 [000]  7006.226761:          1 {{stack_node_data_list.event}}:uk:
 {%- for stack_node_data in stack_node_data_list.data_list %}
 {%- if stack_node_data.symbol and stack_node_data.bin_file %}
                   {{stack_node_data.symbol}}+0x9d ({{stack_node_data.bin_file}})
@@ -110,6 +108,7 @@ perf 209124 [000]  7006.226761:          1 {{stack_node_data_list.event}}:uk:
 {%- endfor %}
 {%- endfor %}
 {%- endfor %}
+
 ";
     tera.add_raw_template("perf_template.data", template_str)?;
     let mut context = Context::new();
