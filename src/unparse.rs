@@ -75,7 +75,14 @@ pub fn construct_template_data(
         }
         let template = StackNodeDataListTemplate {
             data_list: path.clone(),
-            event: sto.profiled_binaries.clone().iter().next().unwrap().clone().event,
+            event: sto
+                .profiled_binaries
+                .clone()
+                .iter()
+                .next()
+                .unwrap()
+                .clone()
+                .event,
             count: first_count,
         };
         results.push(template);

@@ -8,7 +8,7 @@ pub async fn write_sto(out_file: PathBuf) -> Result<(), anyhow::Error> {
     let data_out = StoData {
         stack_node_datas: DATAS.clone(),
         stack_nodes: NODES.clone(),
-        profiled_binaries: BINARIES.clone()
+        profiled_binaries: BINARIES.clone(),
     };
 
     let outbuf = serde_json::to_vec(&data_out)?;

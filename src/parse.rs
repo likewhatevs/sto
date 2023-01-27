@@ -15,14 +15,20 @@ lazy_static! {
     )
     .unwrap();
     static ref SYMBOL_BIN_RE: Regex =
-        Regex::new(r#"^\s*\w+\s*(?P<symbol>.+) \((?P<bin_file>\S*)\)"#).unwrap();
+        Regex::new(r#"^\s*\w+\s*(?P<symbol>.+) \((?P<bin_file>.*)\)$"#).unwrap();
     // this mess is all me, works well enough.
     static ref FILE_LINE_NO_RE: Regex =
-        Regex::new(r#"^\s+(?P<src_file>.*?):(?P<line_no>[0-9]+)$"#).unwrap();
+        Regex::new(r#"^\s+(?P<src_file>.*?):(?P<line_number>[0-9]+)$"#).unwrap();
     static ref END_RE: Regex = Regex::new(r#"^$"#).unwrap();
 }
 
-enum State{ Header, Symbol, LineNumber, Unknown, End }
+enum State {
+    Header,
+    Symbol,
+    LineNumber,
+    Unknown,
+    End,
+}
 
 #[cached(
     type = "SizedCache<(u64,u64,u64), u64>",
@@ -42,7 +48,12 @@ fn get_node_id(parent_id: u64, data_id: u64, root_id: u64) -> u64 {
     create = "{ SizedCache::with_size(10000) }",
     convert = r#"{ format!("{:?}{:?}{:?}", symbol, file, line_number) }"#
 )]
-fn get_data_id(symbol: Option<String>, file: Option<String>, line_number: Option<u32>, bin_file: Option<String>) -> u64 {
+fn get_data_id(
+    symbol: Option<String>,
+    file: Option<String>,
+    line_number: Option<u32>,
+    bin_file: Option<String>,
+) -> u64 {
     let d_str = format!("{symbol:?}{file:?}{line_number:?}{bin_file:?}");
     let mut hasher = HighwayHasher::new(HASHER_SEED);
     hasher.append(d_str.as_bytes());
@@ -51,7 +62,7 @@ fn get_data_id(symbol: Option<String>, file: Option<String>, line_number: Option
 }
 
 #[derive(Default, Debug, Clone)]
-struct RawData{
+struct RawData {
     src_file: Option<String>,
     line_number: Option<u32>,
     bin_file: Option<String>,
@@ -60,18 +71,24 @@ struct RawData{
 
 pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String) {
     let mut profiled_binary: Option<ProfiledBinary> = None;
-    let mut this_raw_data = RawData{..Default::default()};
+    let mut this_raw_data = RawData {
+        ..Default::default()
+    };
     let mut reversed_stack: Vec<RawData> = Vec::new();
     let mut state = State::Header;
 
     let it = data.iter().peekable();
     for row in it {
+        let mut process_line = true;
+        while process_line {
+            process_line = false;
             match state {
                 State::Header => {
                     reversed_stack.clear();
                     if profiled_binary.is_none() {
-                        let caps = HEADER_EVENT_RE.captures(row)
-                            .ok_or_else(|| log::error!("{:#?}", row))
+                        let caps = HEADER_EVENT_RE
+                            .captures(row)
+                            .ok_or_else(|| log::error!("header {:#?}", row))
                             .ok()
                             .unwrap();
                         let event = caps.name("event").map(|x| x.as_str().into());
@@ -80,47 +97,60 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
                             identifier: identifier.clone(),
                             event: event.unwrap(),
                         };
-                        BINARIES.clone()
-                            .entry(pb.id)
-                            .or_insert(pb.clone());
+                        BINARIES.clone().entry(pb.id).or_insert(pb.clone());
                         profiled_binary = Some(pb);
                     }
                     state = State::Symbol;
-                },
+                }
                 State::Symbol => {
-                    let caps = SYMBOL_BIN_RE.captures(row)
-                        .ok_or_else(|| log::error!("{:#?}", row))
-                        .ok()
-                        .unwrap();
-                    this_raw_data.symbol = caps.name("symbol").map(|x| x.as_str().into());
-                    this_raw_data.bin_file = caps.name("bin_file").map(|x| x.as_str().into());
+                    let caps = SYMBOL_BIN_RE
+                        .captures(row)
+                        .ok_or_else(|| log::warn!("sym {:#?}", row))
+                        .ok();
+                    if let Some(captured) = caps {
+                        this_raw_data.symbol = captured.name("symbol").map(|x| x.as_str().into());
+                        this_raw_data.bin_file =
+                            captured.name("bin_file").map(|x| x.as_str().into());
+                    }
                     state = State::LineNumber;
-                },
+                }
                 State::LineNumber => {
                     // this doesn't need to regex twice..
-                    let caps = FILE_LINE_NO_RE.captures(row)
-                        .ok_or_else(|| log::error!("{:#?}", row))
-                        .ok()
-                        .unwrap();
-                    this_raw_data.line_number = caps.name("line_number").and_then(|x| x.as_str().parse().ok());
-                    this_raw_data.src_file = caps.name("src_file").map(|x| x.as_str().into());
+                    let caps = FILE_LINE_NO_RE
+                        .captures(row)
+                        .ok_or_else(|| log::debug!("file {:#?}", row))
+                        .ok();
+                    if let Some(captured) = caps {
+                        this_raw_data.line_number = captured
+                            .name("line_number")
+                            .and_then(|x| x.as_str().parse().ok());
+                        this_raw_data.src_file =
+                            captured.name("src_file").map(|x| x.as_str().into());
+                    }
                     state = State::Unknown;
-                },
+                }
                 State::Unknown => {
                     reversed_stack.push(this_raw_data.clone());
-                    this_raw_data = RawData{..Default::default()};
+                    this_raw_data = RawData {
+                        ..Default::default()
+                    };
+                    process_line = true;
                     if END_RE.is_match(row) {
                         state = State::End;
                     } else {
                         state = State::Symbol;
                     }
-                },
+                }
                 State::End => {
                     reversed_stack.reverse();
                     let mut parent_id = 0;
                     for (depth, i) in reversed_stack.clone().into_iter().enumerate() {
-                        let data_id =
-                            get_data_id(i.symbol.clone(), i.src_file.clone(), i.line_number, i.bin_file.clone());
+                        let data_id = get_data_id(
+                            i.symbol.clone(),
+                            i.src_file.clone(),
+                            i.line_number,
+                            i.bin_file.clone(),
+                        );
                         let node_id = get_node_id(parent_id, data_id, root_id);
 
                         let stack_node_data = StackNodeData {
@@ -150,8 +180,8 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
                         parent_id = node_id;
                     }
                     state = State::Header;
-                },
+                }
             }
         }
     }
-
+}

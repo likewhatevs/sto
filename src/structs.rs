@@ -1,6 +1,6 @@
+use dashmap::DashMap;
 use serde_derive::{Deserialize, Serialize};
 use std::sync::Arc;
-use dashmap::DashMap;
 
 #[derive(Debug, Clone)]
 pub struct StackTrace {
