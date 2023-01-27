@@ -12,8 +12,8 @@ use std::path::PathBuf;
 // discard the deepest child node, repeat until all nodes are processed.
 // feed the generated data into flamegraph and cross fingers that things look the same.
 use crate::structs::{MapStoData, StackNode};
+use handlebars::Handlebars;
 use serde_derive::{Deserialize, Serialize};
-use tera::{Context, Tera};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct StackNodeDataListTemplate {
@@ -77,32 +77,39 @@ pub fn construct_template_data(
             event: sto.profiled_binaries.values().next().unwrap().clone().event,
             count: first_count,
         };
-        results.push(template);
+        // tera => handlebars
+        for _ in 0..first_count {
+            results.push(template.clone());
+        }
     }
     Ok(results)
 }
 
 pub fn unparse_and_write(
-    stack_node_data_lists: Vec<StackNodeDataListTemplate>,
+    stack_node_data_list: Vec<StackNodeDataListTemplate>,
     outfile: PathBuf,
 ) -> Result<(), anyhow::Error> {
-    log::error!("templating");
-    let mut tera = Tera::default();
-    log::error!("{:?}", stack_node_data_lists.len());
+    log::info!("templating");
+    let reg = Handlebars::new();
     let template_str = "
-{%- for stack_node_data_list in stack_node_data_lists -%}
-{%- for i in range(end=stack_node_data_list.count) -%}
-perf 209124 [000]  7006.226761:          1 {{stack_node_data_list.event}}:uk:
-
-
-{% endfor -%}
-{%- endfor -%}
+{{#each stack_node_data_list}}
+perf 209124 [000]  7006.226761:          1 {{event}}:uk:
+{%- for stack_node_data in stack_node_data_list.data_list -%}
+{{#each data_list}}
+{{#if symbol}}
+                  {{symbol}}+0x9d {{#if bin_file}}({{bin_file}}){{else}}([kernel.kallsyms]){{/if}}
+{{/if}}
+{{#if file}}
+  {{file}}:{{#if line_number}}{{line_number}}[112d8f]{{else}}{{/if}}
+{{else}}
+  dummy_data[112d8f]
+{{/if}}
+{{/each}}
+{{/each}}
 ";
-    tera.add_raw_template("perf_template.data", template_str)?;
-    let mut context = Context::new();
-    context.insert("stack_node_data_lists", &stack_node_data_lists);
     let file = std::fs::File::create(outfile)?;
-    let buf = std::io::BufWriter::new(file);
-    tera.render_to("perf_template.data", &context, buf)?;
+    let mut buf = std::io::BufWriter::new(file);
+    reg.render_template_to_write(template_str, &stack_node_data_list, &mut buf)
+        .unwrap();
     Ok(())
 }
