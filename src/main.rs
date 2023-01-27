@@ -13,6 +13,7 @@ use crate::write::write_sto;
 use clap::Parser;
 
 use std::path::PathBuf;
+use std::process::exit;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -37,6 +38,13 @@ struct Cli {
         help = "if present, unsto perf data. if absent, make sto data from perf data."
     )]
     unsto: bool,
+
+    #[arg(
+        short,
+        long,
+        help = "if present, write parsed data to provided postgresql."
+    )]
+    postgres: String,
 }
 
 #[tokio::main]
@@ -49,7 +57,18 @@ async fn main() -> Result<(), anyhow::Error> {
     let out_file = cli.output_file;
     let unsto = cli.unsto;
     let binary_identifier = cli.binary_identifier;
-    if !unsto {
+    let postgres = cli.postgres;
+
+    if unsto && !postgres.is_empty() {
+        log::error!("Select -u or -p, unsto or postgres.");
+        exit(-1)
+    }
+
+    // db write
+    if !postgres.is_empty() {
+        // run function to sink records to postgres.
+        todo!();
+    } else if !unsto {
         read_perf(in_file, binary_identifier).await?;
         write_sto(out_file).await?;
     } else {
