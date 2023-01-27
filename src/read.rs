@@ -20,16 +20,15 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
     let mut lines = buf_reader.lines();
     let mut buf: Vec<String> = Vec::new();
     let queue = queue.clone();
+    let mut handles = vec![];
 
     for _a in 1..WORKER_COUNT {
         let q_ref = queue.clone();
         let binary_identifier = binary_identifier.clone();
-        tokio::spawn(async move {
-            loop {
-                let data_chunk = q_ref.pop().await;
-                process_record(data_chunk, root_id, binary_identifier.clone()).await;
-            }
-        });
+        handles.push(tokio::spawn(async move {
+            let data_chunk = q_ref.pop().await;
+            process_record(data_chunk, root_id, binary_identifier.clone()).await
+        }));
     }
 
     while let Some(line) = lines.next_line().await? {
@@ -39,7 +38,6 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
             while !done {
                 match queue.try_push(buf.clone()) {
                     Err(_x) => {
-                        let _ = time::sleep(Duration::from_millis(1)).await;
                     },
                     Ok(_x) => {
                         done = true;
@@ -52,7 +50,8 @@ pub async fn read_perf(in_file: PathBuf, binary_identifier: String) -> Result<()
         }
     }
 
-    while !queue.is_empty() {}
+    futures::future::join_all(handles).await;
+
     Ok(())
 }
 
