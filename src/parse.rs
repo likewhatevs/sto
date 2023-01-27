@@ -46,7 +46,7 @@ fn get_node_id(parent_id: u64, data_id: u64, root_id: u64) -> u64 {
 #[cached(
     type = "SizedCache<String, u64>",
     create = "{ SizedCache::with_size(10000) }",
-    convert = r#"{ format!("{:?}{:?}{:?}", symbol, file, line_number) }"#
+    convert = r#"{ format!("{:?}{:?}{:?}{:?}", symbol, file, line_number, bin_file) }"#
 )]
 fn get_data_id(
     symbol: Option<String>,
