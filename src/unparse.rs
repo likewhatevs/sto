@@ -11,9 +11,9 @@ use std::path::PathBuf;
 // generate count of deepest child node entries of the template, using this chain.
 // discard the deepest child node, repeat until all nodes are processed.
 // feed the generated data into flamegraph and cross fingers that things look the same.
-use crate::structs::{MapStoData, StackNode};
-use handlebars::Handlebars;
+use crate::structs::{MapStoData};
 use serde_derive::{Deserialize, Serialize};
+use tera::{Context, Tera};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct StackNodeDataListTemplate {
@@ -29,10 +29,11 @@ pub struct StackNodeDataTemplate {
     pub line_number: u32,
     pub bin_file: String,
 }
+
 pub fn construct_template_data(
     sto: MapStoData,
 ) -> Result<Vec<StackNodeDataListTemplate>, anyhow::Error> {
-    let mut depth_vec: Vec<StackNode> = Vec::new();
+    let mut depth_vec = Vec::new();
     for (_a, b) in sto.stack_nodes.iter() {
         depth_vec.push(b.clone());
     }
@@ -77,39 +78,45 @@ pub fn construct_template_data(
             event: sto.profiled_binaries.values().next().unwrap().clone().event,
             count: first_count,
         };
-        // tera => handlebars
-        for _ in 0..first_count {
-            results.push(template.clone());
-        }
+        log::error!("{:?}", first_count);
+        results.push(template);
     }
-    Ok(results)
+    return Ok(results);
 }
 
 pub fn unparse_and_write(
-    stack_node_data_list: Vec<StackNodeDataListTemplate>,
+    stack_node_data_lists: Vec<StackNodeDataListTemplate>,
     outfile: PathBuf,
 ) -> Result<(), anyhow::Error> {
-    log::info!("templating");
-    let reg = Handlebars::new();
+    let mut tera = Tera::default();
     let template_str = "
-{{#each stack_node_data_list}}
-perf 209124 [000]  7006.226761:          1 {{event}}:uk:
-{%- for stack_node_data in stack_node_data_list.data_list -%}
-{{#each data_list}}
-{{#if symbol}}
-                  {{symbol}}+0x9d {{#if bin_file}}({{bin_file}}){{else}}([kernel.kallsyms]){{/if}}
-{{/if}}
-{{#if file}}
-  {{file}}:{{#if line_number}}{{line_number}}[112d8f]{{else}}{{/if}}
-{{else}}
+{%- for stack_node_data_list in stack_node_data_lists %}
+{%- for i in range(end=stack_node_data_list.count) %}
+perf 209124 [000]  7006.226761:          1 {{stack_node_data_list.event}}:uk:
+{%- for stack_node_data in stack_node_data_list.data_list %}
+{%- if stack_node_data.symbol and stack_node_data.bin_file %}
+                  {{stack_node_data.symbol}}+0x9d ({{stack_node_data.bin_file}})
+{%- else if stack_node_data.symbol %}
+        ffffffffb12d1f18 {{stack_node_data.symbol}}+0x38 ([kernel.kallsyms])
+{%- else if stack_node_data.bin_file %}
+        ffffffffb12d1f18 dummy_data+0x38 ({{stack_node_data.bin_file}})
+{%- endif %}
+{%- if stack_node_data.file and stack_node_data.line_number %}
+  {{stack_node_data.file}}:{{stack_node_data.line_number}}
+{%- elif stack_node_data.file %}
+  {{stack_node_data.file}}[112d8f]
+{%- else %}
   dummy_data[112d8f]
-{{/if}}
-{{/each}}
-{{/each}}
+{%- endif %}
+{% endfor %}
+{%- endfor %}
+{%- endfor %}
 ";
+    tera.add_raw_template("perf_template.data", template_str)?;
+    let mut context = Context::new();
+    context.insert("stack_node_data_lists", &stack_node_data_lists);
     let file = std::fs::File::create(outfile)?;
-    let mut buf = std::io::BufWriter::new(file);
-    reg.render_template_to_write(template_str, &stack_node_data_list, &mut buf)
-        .unwrap();
+    let buf = std::io::BufWriter::new(file);
+    tera.render_to("perf_template.data", &context, buf)?;
     Ok(())
 }
