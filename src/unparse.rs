@@ -92,11 +92,9 @@ pub fn unparse_and_write(
     let template_str = "{% for stack_node_data_list in stack_node_data_lists %}{% for i in range(end=stack_node_data_list.count) %}perf 209124 [000]  7006.226761:          1 {{stack_node_data_list.event}}:uk:
 {%- for stack_node_data in stack_node_data_list.data_list %}
 {%- if stack_node_data.symbol and stack_node_data.bin_file %}
-                  {{stack_node_data.symbol}}+0x9d ({{stack_node_data.bin_file}})
+                  {{stack_node_data.symbol}} ({{stack_node_data.bin_file}})
 {%- elif stack_node_data.symbol %}
-        ffffffffb12d1f18 {{stack_node_data.symbol}}+0x38 ([kernel.kallsyms])
-{%- elif stack_node_data.bin_file %}
-        ffffffffb12d1f18 dummy_data+0x38 ({{stack_node_data.bin_file}})
+        ffffffffb12d1f18 {{stack_node_data.symbol}} ([kernel.kallsyms])
 {%- endif %}
 {%- if stack_node_data.file and stack_node_data.line_number %}
   {{stack_node_data.file}}:{{stack_node_data.line_number}}
