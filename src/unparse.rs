@@ -58,7 +58,7 @@ pub fn construct_template_data(
         ),
     };
 
-        let mut depth_vec: Vec<StackNode> = Vec::new();
+    let mut depth_vec: Vec<StackNode> = Vec::new();
     for (_a, b) in sto.stack_nodes.iter() {
         depth_vec.push(b.clone());
     }
@@ -103,6 +103,7 @@ pub fn construct_template_data(
             event: sto.profiled_binaries.values().next().unwrap().clone().event,
             count: first_count,
         };
+        log::error!("pushing results;");
         results.push(template);
     }
     return Ok(results);
@@ -112,6 +113,7 @@ pub fn unparse_and_write(
     stack_node_data_lists: Vec<StackNodeDataListTemplate>,
     outfile: PathBuf,
 ) -> Result<(), anyhow::Error> {
+    log::error!("templating");
     let mut tera = Tera::default();
     let template_str = "
 {%- for stack_node_data_list in stack_node_data_lists -%}
