@@ -1,2 +1,9 @@
 /cmake-build-debug
 /.idea
+/build
+compile_commands.json
+.cache
+.cmake
+cmake_install.cmake
+Makefile
+CMakeFiles

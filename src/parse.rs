@@ -11,14 +11,14 @@ lazy_static! {
     // https://github.com/spiermar/burn/blob/master/convert/perf.go
     // thx!
     static ref HEADER_EVENT_RE: Regex = Regex::new(
-        r#"^\S.+?\s+\d+\d*\s+[^\s]+?\s+[^\s]+?\s+[^\s]?\s+[0-9]*\s*(?P<event>[^:]+):.*$"#
+        r#"^\s+(?P<weight>[0-9]+)(?P<event>\s[a-zA-Z\-_:]+):$"#
     )
     .unwrap();
-    static ref SYMBOL_BIN_RE: Regex =
-        Regex::new(r#"^\s*\w+\s*(?P<symbol>.+) \((?P<bin_file>.*)\)$"#).unwrap();
+    static ref SYMBOL_RE: Regex =
+        Regex::new(r#"^\s+[0-9a-f]+\s(?P<symbol>.*)$"#).unwrap();
     // this mess is all me, works well enough.
     static ref FILE_LINE_NO_RE: Regex =
-        Regex::new(r#"^\s+(?P<src_file>.*?):(?P<line_number>[0-9]+)$"#).unwrap();
+        Regex::new(r#"^\s+(?P<src_file>\/.*):(?P<line_number>[0-9]+)$"#).unwrap();
     static ref END_RE: Regex = Regex::new(r#"^$"#).unwrap();
 }
 
@@ -46,15 +46,14 @@ fn get_node_id(parent_id: u64, data_id: u64, root_id: u64) -> u64 {
 #[cached(
     type = "SizedCache<String, u64>",
     create = "{ SizedCache::with_size(10000) }",
-    convert = r#"{ format!("{:?}{:?}{:?}{:?}", symbol, file, line_number, bin_file) }"#
+    convert = r#"{ format!("{:?}{:?}{:?}", symbol, file, line_number) }"#
 )]
 fn get_data_id(
     symbol: Option<String>,
     file: Option<String>,
     line_number: Option<u32>,
-    bin_file: Option<String>,
-) -> u64 {
-    let d_str = format!("{symbol:?}{file:?}{line_number:?}{bin_file:?}");
+) -> u64{
+    let d_str = format!("{symbol:?}{file:?}{line_number:?}");
     let mut hasher = HighwayHasher::new(HASHER_SEED);
     hasher.append(d_str.as_bytes());
     let id: u64 = hasher.finalize64();
@@ -65,7 +64,6 @@ fn get_data_id(
 struct RawData {
     src_file: Option<String>,
     line_number: Option<u32>,
-    bin_file: Option<String>,
     symbol: Option<String>,
 }
 
@@ -75,7 +73,7 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
     };
     let mut reversed_stack: Vec<RawData> = Vec::new();
     let mut state = State::Header;
-
+    let mut cur_weight = 0;
     let it = data.iter().peekable();
     for row in it {
         let mut process_line = true;
@@ -91,26 +89,27 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
                             .ok();
                         if let Some(capture) = caps {
                             let event = capture.name("event").map(|x| x.as_str().into());
+                            let weight: String = capture.name("weight").map(|x| x.as_str().into()).unwrap();
+                            let weight_int: u64 = weight.parse().unwrap();
+                            cur_weight = weight_int;
                             let pb = ProfiledBinary {
                                 id: root_id,
                                 identifier: identifier.clone(),
                                 event: event.unwrap(),
-                                total_samples: 1,
+                                total_samples: weight_int,
                             };
                             BINARIES.clone().entry(pb.id).or_insert(pb.clone());
                         }
-                    }
+                    } 
                     state = State::Symbol;
                 }
                 State::Symbol => {
-                    let caps = SYMBOL_BIN_RE
+                    let caps = SYMBOL_RE
                         .captures(row)
                         .ok_or_else(|| log::warn!("sym {:#?}", row))
                         .ok();
                     if let Some(captured) = caps {
                         this_raw_data.symbol = captured.name("symbol").map(|x| x.as_str().into());
-                        this_raw_data.bin_file =
-                            captured.name("bin_file").map(|x| x.as_str().into());
                     }
                     state = State::LineNumber;
                 }
@@ -156,7 +155,6 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
                             i.symbol.clone(),
                             i.src_file.clone(),
                             i.line_number,
-                            i.bin_file.clone(),
                         );
                         let node_id = get_node_id(parent_id, data_id, root_id);
                         let stack_node_data = StackNodeData {
@@ -164,14 +162,13 @@ pub async fn process_record(data: Vec<String>, root_id: u64, identifier: String)
                             // sus.
                             symbol: i.symbol.clone().unwrap(),
                             file: i.src_file.clone().unwrap_or("".into()),
-                            bin_file: i.bin_file.clone().unwrap_or("".into()),
                             line_number: i.line_number.unwrap_or(0),
                         };
                         let stack_node = StackNode {
                             id: node_id,
                             parent_id,
                             data_id,
-                            occurrences: 1,
+                            occurrences: cur_weight,
                             depth: u32::try_from(depth).unwrap(),
                         };
                         tmp_list_data.push(stack_node_data);

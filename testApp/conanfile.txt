@@ -1,8 +1,0 @@
-[requires]
-folly/2022.10.03.00#053161f68d1ab2052794722292326f23
-xoshiro-cpp/1.1
-gflags/2.2.2
-glog/0.6.0
-
-[generators]
-cmake

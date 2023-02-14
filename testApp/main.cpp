@@ -5,18 +5,17 @@
 #include <folly/experimental/coro/BlockingWait.h>
 #include <folly/experimental/coro/AsyncScope.h>
 #include <gflags/gflags.h>
-#include <xoshiro-cpp/XoshiroCpp.hpp>
 #include <folly/Conv.h>
 #include <glog/logging.h>
 #include <chrono>
 #include <folly/Synchronized.h>
 #include <folly/concurrency/ConcurrentHashMap.h>
+#include <folly/Random.h>
 
 using namespace std;
 using namespace folly;
-using namespace coro;
-using namespace XoshiroCpp;
 using namespace chrono;
+using namespace coro;
 
 Synchronized<F14FastMap<string,string>> bigMapOfStrings;
 ConcurrentHashMap<string, string> bigChmOfStrings;
@@ -26,17 +25,14 @@ DEFINE_uint64(iterations, 100, "How much pointless stuff to do.");
 DEFINE_bool(mem_intensive, false, "Do mem intensive stuff.");
 DEFINE_bool(use_chm, false, "Use chm for mem intensive stuff.");
 
-Task<void> burn_cycles() {
-    const std::uint64_t seed = 12345;
-    SplitMix64 rng(seed);
+Taskasd<void> burn_cycles() {
     string new_str;
     string old_str;
     std::ostream dev_null(0);
     for(auto i = 0; i < FLAGS_iterations; i++){
         // buggy, but aside the point.
         while(new_str.length() < 100){
-            uint64_t data = rng();
-            new_str.append(to<string>(data));
+            new_str.append(to<string>(folly::Random::rand64()));
         }
         if(FLAGS_mem_intensive){
             if(FLAGS_use_chm){

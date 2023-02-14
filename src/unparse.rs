@@ -27,7 +27,6 @@ pub struct StackNodeDataTemplate {
     pub symbol: String,
     pub file: String,
     pub line_number: u32,
-    pub bin_file: String,
 }
 
 pub fn construct_template_data(
@@ -54,7 +53,6 @@ pub fn construct_template_data(
             symbol: data_map.get(&first.data_id).unwrap().clone().symbol,
             file: data_map.get(&first.data_id).unwrap().clone().file,
             line_number: data_map.get(&first.data_id).unwrap().line_number,
-            bin_file: data_map.get(&first.data_id).unwrap().clone().bin_file,
         };
         path.push(leaf);
         while parent != 0 {
@@ -68,7 +66,6 @@ pub fn construct_template_data(
                 symbol: data_map.get(&parent_node.data_id).unwrap().clone().symbol,
                 file: data_map.get(&parent_node.data_id).unwrap().clone().file,
                 line_number: data_map.get(&parent_node.data_id).unwrap().line_number,
-                bin_file: data_map.get(&parent_node.data_id).unwrap().clone().bin_file,
             };
             path.push(parent_tmpl_data);
             parent = parent_node.parent_id;

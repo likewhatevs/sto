@@ -99,3 +99,12 @@ apt list --installed | cut -f 1 -d '/' | xargs -I {}  sudo apt install '{}-dbgsy
 This bad-idea command will install the debug symbol packages for all those packages it is available 
 for on your system (should you be using ubuntu) and it may have made some of my traces be better quality (idk).
 You can read more about denug symbol packages [here](https://wiki.ubuntu.com/Debug%20Symbol%20Packages).
+
+
+
+# notes
+ sudo perf script --full-source-path -F-comm,-tid,-time,-pid,-addr,-dso,-symoff,+srcline,-cpu,-symoff   -k /boot/vmlinuz-5.15.80-gentoo  --kallsyms=/proc/kallsyms > cpu_perf.txt
+ sudo perf record  --kcore --call-graph fp  -e cycles:uk -a -g  -F 997 ./burn -iterations 100000 -threads 40 -mem_intensive -use_chm
+
+
+
