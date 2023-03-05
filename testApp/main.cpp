@@ -1,5 +1,4 @@
 #include <iostream>
-#include <folly/container/F14Map.h>
 #include <folly/init/Init.h>
 #include <folly/experimental/coro/Task.h>
 #include <folly/experimental/coro/BlockingWait.h>
@@ -8,7 +7,6 @@
 #include <folly/Conv.h>
 #include <glog/logging.h>
 #include <chrono>
-#include <folly/Synchronized.h>
 #include <folly/concurrency/ConcurrentHashMap.h>
 #include <folly/Random.h>
 
@@ -17,31 +15,27 @@ using namespace folly;
 using namespace chrono;
 using namespace coro;
 
-Synchronized<F14FastMap<string,string>> bigMapOfStrings;
 ConcurrentHashMap<string, string> bigChmOfStrings;
 
 DEFINE_uint64(threads, 1, "Threads to waste (effectively).");
 DEFINE_uint64(iterations, 100, "How much pointless stuff to do.");
-DEFINE_bool(mem_intensive, false, "Do mem intensive stuff.");
-DEFINE_bool(use_chm, false, "Use chm for mem intensive stuff.");
+DEFINE_uint64(mem_intensive_ratio, 50, "Do mem intensive stuff X % of time.");
+DEFINE_uint64(dump_size, 100, "What capacity to clear map at.");
 
-Taskasd<void> burn_cycles() {
+Task<void> burn_cycles() {
     string new_str;
     string old_str;
-    std::ostream dev_null(0);
+    std::ostream dev_null(nullptr);
     for(auto i = 0; i < FLAGS_iterations; i++){
+        if(FLAGS_dump_size <= bigChmOfStrings.size()){
+            bigChmOfStrings.clear();
+        }
         // buggy, but aside the point.
         while(new_str.length() < 100){
-            new_str.append(to<string>(folly::Random::rand64()));
+            new_str.append(to<string>(folly::Random::rand32()));
         }
-        if(FLAGS_mem_intensive){
-            if(FLAGS_use_chm){
-                bigChmOfStrings.insert_or_assign(new_str, old_str);
-            } else {
-                auto locked = bigMapOfStrings.wlock();
-                locked->insert_or_assign(new_str, old_str);
-                locked.unlock();
-            }
+        if( UINT32_MAX * (FLAGS_mem_intensive_ratio/100) > folly::Random::rand32()){
+            bigChmOfStrings.insert_or_assign(new_str, old_str);
             old_str = new_str;
             new_str.clear();
         } else {
@@ -66,32 +60,22 @@ int main(int argc, char* argv[]) {
     auto start = system_clock::now().time_since_epoch();
     cout << "Run settings iterations: " << to<string>(FLAGS_iterations)
             << " threads: " << to<string>(FLAGS_threads)
-            << " mem_intensive: " << to<string>(FLAGS_mem_intensive)
-            << " use_chm: " << to<string>(FLAGS_use_chm)
+            << " ratio_of_operations: " << to<string>(FLAGS_mem_intensive_ratio)
+            << " map_dump_size: " << to<string>(FLAGS_dump_size)
             << endl;
     blockingWait(run());
     cout << "Finished all cycle/mem burning tasks." << endl;
     auto t_delta = system_clock::now().time_since_epoch()-start;
     auto duration = duration_cast<seconds>(t_delta).count();
     cout << "Took " << to<string>(duration) << " seconds." << endl;
-    if(FLAGS_mem_intensive){
-        string k;
-        string v;
-        long s;
-        if(FLAGS_use_chm){
-            k = bigChmOfStrings.begin()->first;
-            v = bigChmOfStrings.begin()->second;
-            s = bigChmOfStrings.size();
-        } else {
-            auto locked = bigMapOfStrings.rlock();
-            k = locked->begin()->first;
-            v = locked->begin()->second;
-            s = locked->size();
-            locked.unlock();
-        }
-        cout << "Example of junk data (k v): (" << to<string>(k) << " " << to<string>(v) << ") " << endl;
-        cout << "Junk data entries: " << to<string>(s) << endl;
-    }
+    string k;
+    string v;
+    size_t s;
+    k = bigChmOfStrings.begin()->first;
+    v = bigChmOfStrings.begin()->second;
+    s = bigChmOfStrings.size();
+    cout << "Example of junk data (k v): (" << to<string>(k) << " " << to<string>(v) << ") " << endl;
+    cout << "Junk data entries: " << to<string>(s) << endl;
     return 0;
 }
 

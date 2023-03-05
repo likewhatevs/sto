@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link
+            rel="stylesheet"
+            type="text/css"
+            href="http://cdn.jsdelivr.net/npm/d3-flame-graph@4.1.3/dist/d3-flamegraph.css"
+    />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-GLhlTQ8iRABdZLl6O3oVMWSktQOp6b7In1Zl3/Jr59b6EGGoI1aFkw7cmDA6j6gD" crossorigin="anonymous">
+</head>
+<body>
+<div class="container">
+    <div class="header clearfix">
+        <nav>
+            <div class="pull-right">
+                <form class="form-inline" id="form">
+                    <a class="btn" href="javascript: resetZoom();">Reset zoom</a>
+                    <a class="btn" href="javascript: clear();">Clear</a>
+                    <div class="form-group">
+                        <input type="text" class="form-control" id="term"/>
+                        <a type="button" class="btn btn-primary" href="javascript: search();">Sesarch</a>
+                    </div>
+                </form>
+            </div>
+        </nav>
+        <h3 class="text-muted">d3-flame-graph</h3>
+    </div>
+    <div id="chart"></div>
+    <hr/>
+    <div id="details"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-w76AqPfDkMBDXo30jS1Sgez6pr3x5MlQ1ZAGC+nuZB+EYdgRZgiwxhTBTkF7CXvN"
+        crossorigin="anonymous"></script>
+<script src="
+https://cdn.jsdelivr.net/npm/jquery@3.6.3/dist/jquery.min.js
+"></script>
+<script src="http://cdn.jsdelivr.net/npm/d3@7.8.2/dist/d3.min.js"></script>
+<script src="
+http://cdn.jsdelivr.net/npm/d3-tip@0.9.1/dist/index.min.js
+"></script>
+<script src="
+https://cdn.jsdelivr.net/npm/axios@1.3.4/dist/axios.min.js
+"></script>
+<script
+        type="text/javascript"
+        src="http://cdn.jsdelivr.net/npm/d3-flame-graph@4.1.3/dist/d3-flamegraph.min.js"
+></script>
+<script type="text/javascript">
+    $(document).ready(function () {
+        // Handler for .ready() called.
+
+        var flameGraph = flamegraph()
+            .width(960)
+            .cellHeight(18)
+            .transitionDuration(750)
+            .minFrameSize(5)
+            .transitionEase(d3.easeCubic)
+            .sort(true)
+            //Example to sort in reverse order
+            //.sort(function(a,b){ return d3.descending(a.name, b.name);})
+            .title("")
+            .onClick(onClick)
+            // .differential(false)
+            .selfValue(false);
+        //  lifted from http://martinspier.io/d3-flame-graph/
+
+        // Example on how to use custom tooltips using d3-tip.
+        // var tip = d3.tip()
+        //   .direction("s")
+        //   .offset([8, 0])
+        //   .attr('class', 'd3-flame-graph-tip')
+        //   .html(function(d) { return "name: " + d.data.name + ", value: " + d.data.value; });
+
+        // flameGraph.tooltip(tip);
+
+        var details = document.getElementById("details");
+        flameGraph.setDetailsElement(details);
+
+        // Example on how to use custom labels
+        // var label = function(d) {
+        //  return "name: " + d.name + ", value: " + d.value;
+        // }
+        // flameGraph.label(label);
+
+        // Example of how to set fixed chart height
+        // flameGraph.height(540);
+        axios.get("/data.json").then(function (response) {
+            d3.select("#chart").datum(response.data).call(flameGraph);
+        });
+
+        document
+            .getElementById("form")
+            .addEventListener("submit", function (event) {
+                event.preventDefault();
+                search();
+            });
+
+        function search() {
+            var term = document.getElementById("term").value;
+            flameGraph.search(term);
+        }
+
+        function clear() {
+            document.getElementById("term").value = "";
+            flameGraph.clear();
+        }
+
+        function resetZoom() {
+            flameGraph.resetZoom();
+        }
+
+        function onClick(d) {
+            console.info("Clicked on " + d.data.name);
+        }
+    });
+</script>
+</body>
+</html>

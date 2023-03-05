@@ -6,4 +6,7 @@ compile_commands.json
 .cmake
 cmake_install.cmake
 Makefile
+CMakeFile
+*.cbp
 CMakeFiles
+Testing
