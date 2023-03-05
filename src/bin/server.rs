@@ -77,7 +77,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .attach(TeraResponse::fairing(|tera| {
             tera_resources_initialize!(
                 tera,
-                "index" => "templates/index.tera",
+                "index" => "src/templates/index.tera",
             );
         }))
         .mount("/", routes![index, data])
