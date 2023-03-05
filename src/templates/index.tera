@@ -20,9 +20,11 @@
                 <form class="form-inline" id="form">
                     <a class="btn" href="javascript: resetZoom();">Reset zoom</a>
                     <a class="btn" href="javascript: clear();">Clear</a>
-                    <div class="form-group">
+                    <div class="input-group">
                         <input type="text" class="form-control" id="term"/>
-                        <a type="button" class="btn btn-primary" href="javascript: search();">Sesarch</a>
+                        <button class="btn btn-primary" type="button" id="searchBtn">Search Current FlameGraph</button>
+                        <button class="btn btn-info" type="button" id="resetBtn">Reset Zoom</button>
+                        <button class="btn btn-notice" type="button" id="clearBtn">Clear Search</button>
                     </div>
                 </form>
             </div>
@@ -39,16 +41,16 @@
 <script src="
 https://cdn.jsdelivr.net/npm/jquery@3.6.3/dist/jquery.min.js
 "></script>
-<script src="http://cdn.jsdelivr.net/npm/d3@7.8.2/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.8.2/dist/d3.min.js"></script>
 <script src="
-http://cdn.jsdelivr.net/npm/d3-tip@0.9.1/dist/index.min.js
+https://cdn.jsdelivr.net/npm/d3-v6-tip@1.0.9/build/d3-v6-tip.min.js
 "></script>
 <script src="
 https://cdn.jsdelivr.net/npm/axios@1.3.4/dist/axios.min.js
 "></script>
 <script
         type="text/javascript"
-        src="http://cdn.jsdelivr.net/npm/d3-flame-graph@4.1.3/dist/d3-flamegraph.min.js"
+        src="https://cdn.jsdelivr.net/npm/d3-flame-graph@4.1.3/dist/d3-flamegraph.min.js"
 ></script>
 <script type="text/javascript">
     $(document).ready(function () {
@@ -70,11 +72,29 @@ https://cdn.jsdelivr.net/npm/axios@1.3.4/dist/axios.min.js
         //  lifted from http://martinspier.io/d3-flame-graph/
 
         // Example on how to use custom tooltips using d3-tip.
+
         // var tip = d3.tip()
         //   .direction("s")
         //   .offset([8, 0])
         //   .attr('class', 'd3-flame-graph-tip')
         //   .html(function(d) { return "name: " + d.data.name + ", value: " + d.data.value; });
+        // var label = function(d) {
+        //  return "name: " + d.name + ", value: " + d.value;
+        // }
+        // flameGraph.label(label);
+
+
+        // var tip = d3.tip()
+        //   .direction("s")
+        //   .offset([8, 0])
+        //   .attr('class', 'd3-flame-graph-tip')
+        //   .html(function(d) { return "name: " + d.data.name + ", value: " + d.data.value; });
+        // flameGraph.toolTip(tip)
+
+        var tip = flamegraph.tooltip.defaultFlamegraphTooltip()
+            .text(d => "name: " + d.data.name + ", value: " + d.data.value);
+        flameGraph.tooltip(tip)
+
 
         // flameGraph.tooltip(tip);
 
@@ -97,22 +117,27 @@ https://cdn.jsdelivr.net/npm/axios@1.3.4/dist/axios.min.js
             .getElementById("form")
             .addEventListener("submit", function (event) {
                 event.preventDefault();
-                search();
+                // search();
             });
 
-        function search() {
+        $("#searchBtn").click(function (){
             var term = document.getElementById("term").value;
             flameGraph.search(term);
-        }
+        });
 
-        function clear() {
+        $("#form").submit(function (){
+            var term = document.getElementById("term").value;
+            flameGraph.search(term);
+        });
+
+        $("#resetBtn").click(function (){
+            flameGraph.resetZoom();
+        });
+
+        $("#clearBtn").click(function (){
             document.getElementById("term").value = "";
             flameGraph.clear();
-        }
-
-        function resetZoom() {
-            flameGraph.resetZoom();
-        }
+        });
 
         function onClick(d) {
             console.info("Clicked on " + d.data.name);
