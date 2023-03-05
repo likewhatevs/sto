@@ -1,7 +1,7 @@
 use anyhow::Result;
-use clap::Parser;
+
 use dotenvy::dotenv;
-use once_cell::sync::Lazy;
+
 use rocket::serde::json::Json;
 use rocket::State;
 use rocket_include_tera::{
@@ -12,14 +12,14 @@ use serde_derive::{Deserialize, Serialize};
 use sqlx::migrate::Migrator;
 use sqlx::postgres::PgPoolOptions;
 use std::env;
-use sto::defs::ServerArgs;
-use tera::{Context, Tera};
+
+
 #[macro_use]
 extern crate rocket;
 use serde_json::json;
 #[macro_use]
 extern crate log;
-use sqlx::{Pool, Postgres};
+
 
 static MIGRATOR: Migrator = sqlx::migrate!();
 

@@ -33,7 +33,7 @@ fn bump_memlock_rlimit() -> Result<()> {
 }
 
 fn profile(args: Args) -> Result<()> {
-    let mut skel_builder = BpftuneSkelBuilder::default();
+    let skel_builder = BpftuneSkelBuilder::default();
     bump_memlock_rlimit()?;
     let skel_ = skel_builder.open()?;
     let mut skel = skel_.load()?;
@@ -75,7 +75,7 @@ fn profile(args: Args) -> Result<()> {
         let result = unsafe {
             perf_event_open(
                 &mut attrs,
-                args.pid.clone() as pid_t,
+                args.pid as pid_t,
                 cpu as i32,
                 -1,
                 perf::bindings::PERF_FLAG_FD_CLOEXEC as u64,
@@ -104,10 +104,10 @@ fn symbolize(stack_info: StackInfo) -> Vec<Vec<SymbolizedResult>> {
         pid: Some(stack_info.args.pid),
     }];
     let symbolizer = BlazeSymbolizer::new().unwrap();
-    let symlist = symbolizer.symbolize(&sym_srcs, &stack_info.event.ustack.to_vec());
+    let symlist = symbolizer.symbolize(&sym_srcs, stack_info.event.ustack.as_ref());
     for i in 0..stack_info.event.ustack.len() {
         let address = stack_info.event.ustack[i];
-        if symlist.len() <= i || symlist[i].len() == 0 {
+        if symlist.len() <= i || symlist[i].is_empty() {
             continue;
         }
         let sym_results = &symlist[i];
@@ -142,7 +142,7 @@ fn symbolize(stack_info: StackInfo) -> Vec<Vec<SymbolizedResult>> {
             );
         }
     }
-    return symlist;
+    symlist
 }
 
 async fn process(args: Args) -> Result<(), anyhow::Error> {
@@ -189,7 +189,7 @@ async fn process(args: Args) -> Result<(), anyhow::Error> {
 
 async fn sink_data(data: Vec<Vec<SymbolizedResult>>) -> Result<(), anyhow::Error> {
     // hash and db insert.
-    data;
+    drop(data);
     Ok(())
 }
 
