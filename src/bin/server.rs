@@ -1,26 +1,30 @@
-use std::env;
 use anyhow::Result;
 use clap::Parser;
 use dotenvy::dotenv;
-use sto::defs::ServerArgs;
-use serde_derive::{Deserialize, Serialize};
-use tera::{Context, Tera};
 use once_cell::sync::Lazy;
 use rocket::serde::json::Json;
 use rocket::State;
-use rocket_include_tera::{EtagIfNoneMatch, tera_resources_initialize, tera_response_cache, TeraContextManager, TeraResponse, tera_response};
+use rocket_include_tera::{
+    tera_resources_initialize, tera_response, tera_response_cache, EtagIfNoneMatch,
+    TeraContextManager, TeraResponse,
+};
+use serde_derive::{Deserialize, Serialize};
 use sqlx::migrate::Migrator;
 use sqlx::postgres::PgPoolOptions;
-#[macro_use] extern crate rocket;
+use std::env;
+use sto::defs::ServerArgs;
+use tera::{Context, Tera};
+#[macro_use]
+extern crate rocket;
 use serde_json::json;
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 use sqlx::{Pool, Postgres};
 
 static MIGRATOR: Migrator = sqlx::migrate!();
 
-
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct D3FlamegraphData{
+pub struct D3FlamegraphData {
     pub name: String,
     pub value: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -33,8 +37,8 @@ fn hello(id: u64) -> String {
 }
 
 #[get("/data.json")]
-fn data()->Json<D3FlamegraphData>{
-    Json(D3FlamegraphData{
+fn data() -> Json<D3FlamegraphData> {
+    Json(D3FlamegraphData {
         name: "asdasda".to_string(),
         value: 12,
         children: Option::from(vec![
@@ -47,7 +51,7 @@ fn data()->Json<D3FlamegraphData>{
                 name: "dsqwd".to_string(),
                 value: 3,
                 children: None,
-            }
+            },
         ]),
     })
 }
@@ -69,7 +73,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let pool = PgPoolOptions::new()
         .max_connections(100)
-        .connect(db.as_str()).await?;
+        .connect(db.as_str())
+        .await?;
 
     MIGRATOR.run(&pool).await?;
 
@@ -82,8 +87,10 @@ async fn main() -> Result<(), anyhow::Error> {
         }))
         .mount("/", routes![index, data])
         .manage(pool)
-        .ignite().await?
-        .launch().await?;
+        .ignite()
+        .await?
+        .launch()
+        .await?;
 
     Ok(())
 }

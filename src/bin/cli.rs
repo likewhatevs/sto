@@ -1,5 +1,7 @@
 use anyhow::{bail, Result};
-use blazesym::{BlazeSymbolizer, SymbolizedResult, SymbolSrcCfg};
+use atomic_counter::{AtomicCounter, ConsistentCounter};
+use blazesym::{BlazeSymbolizer, SymbolSrcCfg, SymbolizedResult};
+use clap::Parser;
 use core::time::Duration;
 use libbpf_rs::RingBufferBuilder;
 use perf_event_open_sys as perf;
@@ -7,10 +9,11 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use atomic_counter::{AtomicCounter, ConsistentCounter};
-use clap::Parser;
 use sto::bpftune::bpftune_bss_types::stacktrace_event;
-use sto::defs::{Args, EventType, PROCESS_TASK_COUNT, ProcessQueue, READ_TASK_COUNT, ReadQueue, StackInfo, WORKER_COUNT};
+use sto::defs::{
+    Args, EventType, ProcessQueue, ReadQueue, StackInfo, PROCESS_TASK_COUNT, READ_TASK_COUNT,
+    WORKER_COUNT,
+};
 extern crate clap;
 extern crate num_cpus;
 use libbpf_rs::libbpf_sys::pid_t;
@@ -29,9 +32,6 @@ fn bump_memlock_rlimit() -> Result<()> {
     Ok(())
 }
 
-
-
-
 fn profile(args: Args) -> Result<()> {
     let mut skel_builder = BpftuneSkelBuilder::default();
     bump_memlock_rlimit()?;
@@ -45,7 +45,7 @@ fn profile(args: Args) -> Result<()> {
         if event.pid == 0 {
             return 0;
         }
-        symbolize(StackInfo{ event, args });
+        symbolize(StackInfo { event, args });
         0
     })?;
     thread::spawn(move || loop {});
@@ -57,11 +57,11 @@ fn profile(args: Args) -> Result<()> {
     for cpu in 0..num_cpus::get() {
         let mut attrs = perf::bindings::perf_event_attr::default();
         attrs.size = std::mem::size_of::<perf::bindings::perf_event_attr>() as u32;
-        match args.event_type{
+        match args.event_type {
             EventType::Cycles => {
                 attrs.type_ = perf::bindings::PERF_TYPE_HARDWARE;
                 attrs.config = perf::bindings::PERF_COUNT_HW_CPU_CYCLES as u64;
-            },
+            }
             EventType::Clock => {
                 attrs.type_ = perf::bindings::PERF_TYPE_SOFTWARE;
                 attrs.config = perf::bindings::PERF_COUNT_SW_CPU_CLOCK as u64;
@@ -112,7 +112,7 @@ fn symbolize(stack_info: StackInfo) -> Vec<Vec<SymbolizedResult>> {
         }
         let sym_results = &symlist[i];
         if sym_results.len() > 1 {
-// One address may get several results (ex, inline code)
+            // One address may get several results (ex, inline code)
             println!("0x{:x} ({} entries)", address, sym_results.len());
 
             for result in sym_results {
@@ -123,7 +123,10 @@ fn symbolize(stack_info: StackInfo) -> Vec<Vec<SymbolizedResult>> {
                     line_no,
                     column,
                 } = result;
-                println!("    {}@0x{:#x} {}:{} {}", symbol, start_address, path, line_no, column);
+                println!(
+                    "    {}@0x{:#x} {}:{} {}",
+                    symbol, start_address, path, line_no, column
+                );
             }
         } else {
             let SymbolizedResult {
@@ -142,7 +145,7 @@ fn symbolize(stack_info: StackInfo) -> Vec<Vec<SymbolizedResult>> {
     return symlist;
 }
 
-async fn process(args: Args) -> Result<(), anyhow::Error>{
+async fn process(args: Args) -> Result<(), anyhow::Error> {
     let rq = Arc::new(ReadQueue::new(READ_TASK_COUNT));
     let pq = Arc::new(ProcessQueue::new(PROCESS_TASK_COUNT));
     let start_rc = Arc::new(ConsistentCounter::new(0));
@@ -184,12 +187,11 @@ async fn process(args: Args) -> Result<(), anyhow::Error>{
     Ok(())
 }
 
-async fn sink_data(data: Vec<Vec<SymbolizedResult>>) -> Result<(), anyhow::Error>{
+async fn sink_data(data: Vec<Vec<SymbolizedResult>>) -> Result<(), anyhow::Error> {
     // hash and db insert.
     data;
     Ok(())
 }
-
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {

@@ -1,15 +1,15 @@
-use dashmap::DashMap;
-use serde_derive::{Deserialize, Serialize};
-use std::sync::Arc;
-use chrono::{DateTime, Utc};
 use crate::bpftune::bpftune_bss_types::stacktrace_event;
-use clap::{Parser, ValueEnum};
+use blazesym::SymbolizedResult;
+use chrono::{DateTime, Utc};
 use clap::{arg, command};
+use clap::{Parser, ValueEnum};
+use copystr::CopyStringCapacity;
+use dashmap::DashMap;
 use highway::Key;
 use once_cell::sync::Lazy;
-use blazesym::SymbolizedResult;
-use copystr::CopyStringCapacity;
+use serde_derive::{Deserialize, Serialize};
 use sqlx::FromRow;
+use std::sync::Arc;
 
 pub const READ_TASK_COUNT: usize = 10000000;
 pub const PROCESS_TASK_COUNT: usize = 100;
@@ -25,16 +25,15 @@ pub static BINARIES: Lazy<Arc<DashMap<u64, ProfiledBinary>>> =
     Lazy::new(|| Arc::new(DashMap::new()));
 
 #[derive(ValueEnum, Debug, Serialize, Deserialize, Clone, Copy)]
-pub enum EventType{
+pub enum EventType {
     Cycles,
-    Clock
+    Clock,
 }
-
 
 #[derive(Parser, Debug, Serialize, Deserialize, Clone, Copy)]
 #[command(author, version, about, long_about = "Do stuff")]
 pub struct Args {
-    #[arg(short, long, required=true)]
+    #[arg(short, long, required = true)]
     pub pid: u32,
     #[arg(short, long, default_value_t = 100000)]
     pub samples: u32,
@@ -42,7 +41,11 @@ pub struct Args {
     pub event_type: EventType,
     #[arg(short, long, default_value_t = 100000, help = "sample frequency.")]
     pub sample_freq: u64,
-    #[arg(short, long, help = "if present, write parsed data to provided postgresql.")]
+    #[arg(
+        short,
+        long,
+        help = "if present, write parsed data to provided postgresql."
+    )]
     pub db: CopyStringCapacity,
 }
 
@@ -93,5 +96,3 @@ pub struct StackNodeData {
     pub file: String,
     pub line_number: u32,
 }
-
-

@@ -1,11 +1,11 @@
+use crate::bpftune::bpftune_bss_types;
+use plain::Plain;
 use std::num::ParseIntError;
 use std::str::FromStr;
-use plain::Plain;
-use crate::bpftune::bpftune_bss_types;
 
-pub mod defs;
 #[path = "bpf/bpftune.skel.rs"]
 pub mod bpftune;
+pub mod defs;
 
 unsafe impl Plain for bpftune_bss_types::stacktrace_event {}
 
