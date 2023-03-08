@@ -156,7 +156,7 @@ async fn process(args: Args) -> Result<(), anyhow::Error> {
         let start_rc_ref = start_rc.clone();
         tokio::spawn(async move {
             loop {
-                if (start_rc_ref.clone().get() as u32) >= args.samples {
+                if (start_rc_ref.clone().get() as u32) >= args.total_samples {
                     break;
                 }
                 start_rc_ref.inc();

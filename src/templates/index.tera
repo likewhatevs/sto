@@ -7,33 +7,59 @@
     <link
             rel="stylesheet"
             type="text/css"
-            href="http://cdn.jsdelivr.net/npm/d3-flame-graph@4.1.3/dist/d3-flamegraph.css"
+            href="dist/d3-flamegraph.css"
     />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet"
           integrity="sha384-GLhlTQ8iRABdZLl6O3oVMWSktQOp6b7In1Zl3/Jr59b6EGGoI1aFkw7cmDA6j6gD" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/bumbeishvili/d3-tip-for-v6@4/d3-tip.min.css">
+    <link href="
+https://cdn.jsdelivr.net/npm/jsgrid@1.5.3/dist/jsgrid-theme.min.css
+" rel="stylesheet">
 </head>
 <body>
 <div class="container">
+    <h3 class="text-muted">Sto, demo ui</h3>
     <div class="header clearfix">
         <nav>
-            <div class="pull-right">
-                <form class="form-inline" id="form">
-                    <a class="btn" href="javascript: resetZoom();">Reset zoom</a>
-                    <a class="btn" href="javascript: clear();">Clear</a>
+            <div class="row g-2">
+            <div class="row g-2">
+                <form class="form-inline" id="dataform">
                     <div class="input-group">
-                        <input type="text" class="form-control" id="term"/>
-                        <button class="btn btn-primary" type="button" id="searchBtn">Search Current FlameGraph</button>
-                        <button class="btn btn-info" type="button" id="resetBtn">Reset Zoom</button>
-                        <button class="btn btn-notice" type="button" id="clearBtn">Clear Search</button>
+                    <select class="form-select" size="3" aria-label="size 3 select example" id="dataSelector">
+                        {% for binary in binaries %}
+                            <option selected value="{{ binary.id }}">
+                                <div class="row g-2 align-items-center">
+                                    <div class="col">{{ binary.name }}</div>
+                                    <div class="col">{{ binary.version }}</div>
+                                    <div class="col">{{ binary.date }}</div>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-primary" type="button" id="dataBtn">Open</button>
                     </div>
                 </form>
             </div>
+                <div class="row g-2">
+                <form class="form-inline" id="form">
+                    <div class="input-group">
+                        <button class="btn btn-info" type="button" id="resetBtn">Reset Zoom</button>
+                        <input type="text" class="form-control" id="term"/>
+                        <button class="btn btn-primary" type="button" id="searchBtn">Search Current FlameGraph</button>
+                        <button class="btn btn-secondary" type="button" id="clearBtn">Clear Search</button>
+                    </div>
+                </form>
+                </div>
+            </div>
         </nav>
-        <h3 class="text-muted">d3-flame-graph</h3>
+        <h3 class="text-muted">spit out template card here.</h3>
     </div>
-    <div id="chart"></div>
     <hr/>
+    <div class="col gr-2">
+        <div id="chart"></div>
+    </div>
+    <hr/>
+    <div class="col gr-2">
     <div id="details"></div>
+    </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-w76AqPfDkMBDXo30jS1Sgez6pr3x5MlQ1ZAGC+nuZB+EYdgRZgiwxhTBTkF7CXvN"
@@ -42,22 +68,31 @@
 https://cdn.jsdelivr.net/npm/jquery@3.6.3/dist/jquery.min.js
 "></script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.8.2/dist/d3.min.js"></script>
-<script src="
-https://cdn.jsdelivr.net/npm/d3-v6-tip@1.0.9/build/d3-v6-tip.min.js
-"></script>
+<script src="https://unpkg.com/d3-v6-tip@1.0.6/build/d3-v6-tip.js"></script>
 <script src="
 https://cdn.jsdelivr.net/npm/axios@1.3.4/dist/axios.min.js
 "></script>
 <script
         type="text/javascript"
-        src="https://cdn.jsdelivr.net/npm/d3-flame-graph@4.1.3/dist/d3-flamegraph.min.js"
+        src="dist/d3-flamegraph.min.js"
 ></script>
+<script
+        type="text/javascript"
+        src="dist/d3-flamegraph-colorMapper.min.js"
+></script>
+<script
+        type="text/javascript"
+        src="dist/d3-flamegraph-tooltip.min.js"
+></script>
+<script src="
+https://cdn.jsdelivr.net/npm/jsgrid@1.5.3/dist/jsgrid.min.js
+"></script>
 <script type="text/javascript">
     $(document).ready(function () {
         // Handler for .ready() called.
 
         var flameGraph = flamegraph()
-            .width(960)
+            .width($('#chart').width())
             .cellHeight(18)
             .transitionDuration(750)
             .minFrameSize(5)
@@ -65,7 +100,7 @@ https://cdn.jsdelivr.net/npm/axios@1.3.4/dist/axios.min.js
             .sort(true)
             //Example to sort in reverse order
             //.sort(function(a,b){ return d3.descending(a.name, b.name);})
-            .title("")
+            .title("asdf")
             .onClick(onClick)
             // .differential(false)
             .selfValue(false);
@@ -91,12 +126,19 @@ https://cdn.jsdelivr.net/npm/axios@1.3.4/dist/axios.min.js
         //   .html(function(d) { return "name: " + d.data.name + ", value: " + d.data.value; });
         // flameGraph.toolTip(tip)
 
-        var tip = flamegraph.tooltip.defaultFlamegraphTooltip()
-            .text(d => "name: " + d.data.name + ", value: " + d.data.value);
+        // var tip = flamegraph.tooltip.defaultFlamegraphTooltip()
+        //     .text(d => "name: " + d.data.name + ", value: " + d.data.value);
+        var tip = d3.tip().attr('class', 'd3-tip').html((EVENT)=>{
+            var resp = 'symbol: ' + EVENT.data.name;
+                if(EVENT.data.filename){
+                    resp += '<br>' + EVENT.data.filename;
+                }
+                if(EVENT.data.line_number){
+                    resp += ':' + EVENT.data.line_number;
+                }
+                return resp;
+            });
         flameGraph.tooltip(tip)
-
-
-        // flameGraph.tooltip(tip);
 
         var details = document.getElementById("details");
         flameGraph.setDetailsElement(details);
@@ -109,8 +151,22 @@ https://cdn.jsdelivr.net/npm/axios@1.3.4/dist/axios.min.js
 
         // Example of how to set fixed chart height
         // flameGraph.height(540);
-        axios.get("/data.json").then(function (response) {
+        axios.get("/data/1").then(function (response) {
             d3.select("#chart").datum(response.data).call(flameGraph);
+        });
+
+        document
+            .getElementById("dataform")
+            .addEventListener("submit", function (event) {
+                event.preventDefault();
+            });
+
+        $("#dataBtn").click(function (){
+            var term = document.getElementById("dataSelector").value;
+            axios.get("/data/"+term).then(function (response) {
+                flameGraph.clear();
+                d3.select("#chart").datum(response.data).call(flameGraph);
+            });
         });
 
         document

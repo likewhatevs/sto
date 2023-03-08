@@ -3,39 +3,65 @@
 #include <folly/experimental/coro/Task.h>
 #include <folly/experimental/coro/BlockingWait.h>
 #include <folly/experimental/coro/AsyncScope.h>
+#include <folly/experimental/coro/Mutex.h>
 #include <gflags/gflags.h>
 #include <folly/Conv.h>
-#include <glog/logging.h>
+#include <folly/logging/xlog.h>
+#include <folly/logging/LogLevel.h>
 #include <chrono>
 #include <folly/concurrency/ConcurrentHashMap.h>
 #include <folly/Random.h>
+#include <csignal>
+#include <cstdlib>
+#include <unistd.h>
 
 using namespace std;
 using namespace folly;
-using namespace chrono;
+using namespace std::chrono;
 using namespace coro;
 
-ConcurrentHashMap<string, string> bigChmOfStrings;
+folly::coro::CancellableAsyncScope backgroundScope;
+ConcurrentHashMapSIMD<string, string> bigMapOfStr;
+folly::coro::Mutex map_lock;
 
-DEFINE_uint64(threads, 1, "Threads to waste (effectively).");
-DEFINE_uint64(iterations, 100, "How much pointless stuff to do.");
-DEFINE_uint64(mem_intensive_ratio, 50, "Do mem intensive stuff X % of time.");
-DEFINE_uint64(dump_size, 100, "What capacity to clear map at.");
+DEFINE_uint64(threads, 10, "Threads to waste (effectively).");
+DEFINE_uint64(seconds, 15, "seconds to waste compute for");
+DEFINE_double(mem_intensive_ratio, 0.5, "Do mem intensive stuff X % of time, 0-1.");
+DEFINE_uint64(dump_size, 1000, "What capacity to clear map at.");
 
-Task<void> burn_cycles() {
+Task<void> map_write(std::string k, std::string v){
+    co_await map_lock.co_scoped_lock();
+    bigMapOfStr.insert_or_assign(k, v);
+    co_return;
+}
+
+Task<void> map_clear(){
+    co_await map_lock.co_scoped_lock();
+    bigMapOfStr.clear();
+    co_return;
+}
+
+Task<uint64_t> map_size(){
+    co_await map_lock.co_scoped_lock();
+    co_return bigMapOfStr.size();
+}
+
+Task<void> burn_cycles(auto start) {
     string new_str;
     string old_str;
     std::ostream dev_null(nullptr);
-    for(auto i = 0; i < FLAGS_iterations; i++){
-        if(FLAGS_dump_size <= bigChmOfStrings.size()){
-            bigChmOfStrings.clear();
+    auto cur = std::chrono::system_clock::now();
+    while(cur < start + std::chrono::seconds(FLAGS_seconds)){
+        auto items = co_await map_size();
+        if(FLAGS_dump_size <= 0){
+            XLOG(INFO) << "clearing map";
+            co_await map_clear();
         }
-        // buggy, but aside the point.
         while(new_str.length() < 100){
             new_str.append(to<string>(folly::Random::rand32()));
         }
-        if( UINT32_MAX * (FLAGS_mem_intensive_ratio/100) > folly::Random::rand32()){
-            bigChmOfStrings.insert_or_assign(new_str, old_str);
+        if(folly::Random::randDouble(0, 1.0)>FLAGS_mem_intensive_ratio){
+            co_await map_write(old_str, new_str);
             old_str = new_str;
             new_str.clear();
         } else {
@@ -46,37 +72,41 @@ Task<void> burn_cycles() {
 }
 
 Task<void> run() {
-    folly::coro::AsyncScope backgroundScope;
+    auto start = std::chrono::system_clock::now();
     for(auto i = 0; i < FLAGS_threads; i++){
-        backgroundScope.add(burn_cycles().scheduleOn(getGlobalCPUExecutor().get()));
+        backgroundScope.add(burn_cycles(start).scheduleOn(getGlobalCPUExecutor().get()));
+        XLOG(DBG) << "Reassigned bs tasks." << endl;
     }
-    cout << "Started all cycle/mem burning tasks." << endl;
-    co_await backgroundScope.joinAsync();
+    XLOG(DBG) << "Started tasks." << endl;
+    if(!backgroundScope.isScopeCancellationRequested()) {
+        co_await backgroundScope.joinAsync();
+    }
+    XLOG(DBG) << "Awaited tasks." << endl;
     co_return;
+}
+
+void signal_callback_handler(int signum) {
+    if(!backgroundScope.isScopeCancellationRequested()){
+        blockingWait(backgroundScope.cancelAndJoinAsync());
+    }
+    exit(0);
 }
 
 int main(int argc, char* argv[]) {
     folly::init(&argc, &argv, true);
-    auto start = system_clock::now().time_since_epoch();
-    cout << "Run settings iterations: " << to<string>(FLAGS_iterations)
-            << " threads: " << to<string>(FLAGS_threads)
-            << " ratio_of_operations: " << to<string>(FLAGS_mem_intensive_ratio)
-            << " map_dump_size: " << to<string>(FLAGS_dump_size)
-            << endl;
+    signal(SIGINT, signal_callback_handler);
+    signal(SIGTERM, signal_callback_handler);
+    signal(SIGABRT, signal_callback_handler);
+    signal(SIGKILL, signal_callback_handler);
+    XLOG(INFO) << "PID: " << getpid();
+    XLOG(INFO) << "Run settings seconds: " << to<string>(FLAGS_seconds)
+         << " threads: " << to<string>(FLAGS_threads)
+         << " ratio_of_operations: " << to<string>(FLAGS_mem_intensive_ratio)
+         << " map_dump_size: " << to<string>(FLAGS_dump_size)
+         << endl;
+    XLOG(INFO) << "PID: " << getpid();
     blockingWait(run());
-    cout << "Finished all cycle/mem burning tasks." << endl;
-    auto t_delta = system_clock::now().time_since_epoch()-start;
-    auto duration = duration_cast<seconds>(t_delta).count();
-    cout << "Took " << to<string>(duration) << " seconds." << endl;
-    string k;
-    string v;
-    size_t s;
-    k = bigChmOfStrings.begin()->first;
-    v = bigChmOfStrings.begin()->second;
-    s = bigChmOfStrings.size();
-    cout << "Example of junk data (k v): (" << to<string>(k) << " " << to<string>(v) << ") " << endl;
-    cout << "Junk data entries: " << to<string>(s) << endl;
-    return 0;
+    exit(0);
 }
 
 

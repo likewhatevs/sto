@@ -36,7 +36,7 @@ pub struct Args {
     #[arg(short, long, required = true)]
     pub pid: u32,
     #[arg(short, long, default_value_t = 100000)]
-    pub samples: u32,
+    pub total_samples: u32,
     #[arg(value_enum, short, long, default_value_t = EventType::Cycles)]
     pub event_type: EventType,
     #[arg(short, long, default_value_t = 100000, help = "sample frequency.")]
@@ -46,14 +46,7 @@ pub struct Args {
         long,
         help = "if present, write parsed data to provided postgresql."
     )]
-    pub db: CopyStringCapacity,
-}
-
-#[derive(Parser, Debug, Serialize, Deserialize, Clone)]
-#[command(author, version, about, long_about = "Do *server* stuff")]
-pub struct ServerArgs {
-    #[arg(short, long, default_value_t = String::from("localhost"),  help = "Serve data from the specified postgresql")]
-    pub db: String,
+    pub db: Option<CopyStringCapacity>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

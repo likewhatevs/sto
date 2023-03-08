@@ -15,7 +15,8 @@ create table profiled_binary
     basename      text not null,
     updated_at    timestamptz not null,
     created_at    timestamptz not null,
-    sample_count  bigint      not null
+    sample_count  bigint      not null,
+    raw_data_size bigint      not null
 );
 
 create table stack_node
