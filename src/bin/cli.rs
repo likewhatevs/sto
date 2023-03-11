@@ -1,14 +1,14 @@
-use ahash::AHasher;
+
 use anyhow::{bail, Result};
 use async_ctrlc::CtrlC;
-use atomic_counter::{AtomicCounter, ConsistentCounter};
+use atomic_counter::{AtomicCounter};
 use blazesym::{BlazeSymbolizer, SymbolSrcCfg, SymbolizedResult, SymbolizerFeature};
-use cached::instant::now;
+
 use clap::Parser;
 use core::time::Duration;
 use deadqueue::limited::Queue;
 use deepsize::DeepSizeOf;
-use futures::TryFutureExt;
+
 use highway::{HighwayHash, HighwayHasher};
 use libbpf_rs::RingBufferBuilder;
 use perf_event_open_sys as perf;
@@ -17,8 +17,8 @@ use std::collections::HashMap;
 use std::default::Default;
 use std::future::Future;
 use std::process::{Child, Command};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::mpsc::{channel, sync_channel, RecvError, SyncSender};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc::{sync_channel, SyncSender};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{process, thread};
@@ -30,16 +30,16 @@ use sto::defs::{
 extern crate clap;
 extern crate num_cpus;
 use libbpf_rs::libbpf_sys::pid_t;
-use libc::{exit, getrlimit, setrlimit};
-use log::{debug, error, info};
+
+use log::{error, info};
 use moka::sync::Cache;
-use once_cell::sync::{Lazy, OnceCell};
+use once_cell::sync::{Lazy};
 use perf::perf_event_open;
-use reqwest::{Error, Response};
+
 use rlimit::Resource;
-use rocket::data::ToByteUnit;
+
 use rocket::form::validate::Len;
-use rocket::http::ext::IntoCollection;
+
 use sto::bpftune::*;
 use symbolic_demangle::{Demangle, DemangleOptions};
 use tokio::runtime::Handle;
@@ -86,10 +86,10 @@ fn bump_memlock_rlimit() -> Result<()> {
     let (ml_soft, ml_hard) = Resource::get(rlimit::Resource::MEMLOCK)?;
     if min(ml_soft, ml_hard) < 128 << 20 {
         match Resource::set(Resource::MEMLOCK, 128 << 20, 128 << 20) {
-            Ok(x) => {
+            Ok(_x) => {
                 info!("raised ulimit.");
             }
-            Err(x) => {
+            Err(_x) => {
                 bail!(
                     "unable to raise memlock limit and memlock limit uncomfortably low. \
                        please run the following command and retry:\n\
@@ -104,7 +104,7 @@ fn bump_memlock_rlimit() -> Result<()> {
     Ok(())
 }
 
-fn profile(args: Args, tx: SyncSender<StackInfo>, rt: tokio::runtime::Handle) -> Result<()> {
+fn profile(args: Args, tx: SyncSender<StackInfo>, _rt: tokio::runtime::Handle) -> Result<()> {
     info!("IN PROFILE");
     let skel_builder = BpftuneSkelBuilder::default();
     bump_memlock_rlimit()?;
@@ -123,7 +123,7 @@ fn profile(args: Args, tx: SyncSender<StackInfo>, rt: tokio::runtime::Handle) ->
         let tx = tx.clone();
         thread::spawn(move || {
             tx.send(StackInfo {
-                event: event,
+                event,
                 args: guess_it_is.clone(),
             })
             .unwrap()
@@ -141,7 +141,7 @@ fn profile(args: Args, tx: SyncSender<StackInfo>, rt: tokio::runtime::Handle) ->
     for cpu in 0..num_cpus::get() {
         let mut attrs = perf::bindings::perf_event_attr::default();
         attrs.size = std::mem::size_of::<perf::bindings::perf_event_attr>() as u32;
-        match args.event_type.clone() {
+        match args.event_type {
             EventType::Cycles => {
                 attrs.type_ = perf::bindings::PERF_TYPE_HARDWARE;
                 attrs.config = perf::bindings::PERF_COUNT_HW_CPU_CYCLES as u64;
@@ -152,14 +152,14 @@ fn profile(args: Args, tx: SyncSender<StackInfo>, rt: tokio::runtime::Handle) ->
             }
         }
 
-        attrs.__bindgen_anon_1.sample_freq = args.sample_freq.clone();
+        attrs.__bindgen_anon_1.sample_freq = args.sample_freq;
         attrs.set_freq(1);
         // attrs.set_exclude_kernel(0);
         attrs.set_exclude_hv(1);
         let result = unsafe {
             perf_event_open(
                 &mut attrs,
-                args.pid.clone() as pid_t,
+                args.pid as pid_t,
                 cpu as i32,
                 -1,
                 perf::bindings::PERF_FLAG_FD_CLOEXEC as u64,
@@ -172,7 +172,7 @@ fn profile(args: Args, tx: SyncSender<StackInfo>, rt: tokio::runtime::Handle) ->
     let mut i = 0;
     loop {
         rb.poll(Duration::from_millis(1))?;
-        i = i + 1;
+        i += 1;
         if i >= 3000 {
             i = 0;
             let last_update = LAST_UPDATED.load(Ordering::SeqCst) as u64;
@@ -212,14 +212,14 @@ fn misc_id(data: String) -> u64 {
             let mut hasher = HighwayHasher::new(HASHER_SEED);
             hasher.append(data.as_bytes());
             let id: u64 = hasher.finalize64();
-            MISC_ID_CACHE.insert(data.clone(), id.clone());
+            MISC_ID_CACHE.insert(data.clone(), id);
             id
         }
     }
 }
 
 fn id_stack_node(data: &mut StackNode) {
-    let id = match NODE_ID_CACHE.get(&data) {
+    let id = match NODE_ID_CACHE.get(data) {
         Some(hit) => hit,
         None => {
             let mut hasher = HighwayHasher::new(HASHER_SEED);
@@ -230,7 +230,7 @@ fn id_stack_node(data: &mut StackNode) {
             hasher.append(&data.profiled_binary_id.to_be_bytes());
             let id: u64 = hasher.finalize64();
             // should probably restructure this a bit because of 0 id in cache.
-            NODE_ID_CACHE.insert(data.clone(), id.clone());
+            NODE_ID_CACHE.insert(data.clone(), id);
             id
         }
     };
@@ -238,7 +238,7 @@ fn id_stack_node(data: &mut StackNode) {
 }
 
 fn id_data(data: &mut StackNodeData) {
-    let id = match DATA_ID_CACHE.get(&data) {
+    let id = match DATA_ID_CACHE.get(data) {
         Some(hit) => hit,
         None => {
             let mut hasher = HighwayHasher::new(HASHER_SEED);
@@ -251,7 +251,7 @@ fn id_data(data: &mut StackNodeData) {
             }
             let id: u64 = hasher.finalize64();
             // should probably restructure this a bit because of 0 id in cache.
-            DATA_ID_CACHE.insert(data.clone(), id.clone());
+            DATA_ID_CACHE.insert(data.clone(), id);
             id
         }
     };
@@ -268,7 +268,7 @@ fn symbolize(stack_info: StackInfo) -> Vec<Vec<SymbolizedResult>> {
     symlist
 }
 
-async fn process(args: Args, rt: tokio::runtime::Handle, init: bool) -> Result<(), anyhow::Error> {
+async fn process(args: Args, rt: tokio::runtime::Handle, _init: bool) -> Result<(), anyhow::Error> {
     info!("IN PROCESS");
     let (tx, rx) = sync_channel(5000);
 
@@ -315,7 +315,7 @@ async fn process(args: Args, rt: tokio::runtime::Handle, init: bool) -> Result<(
     info!("SPAWNED WORKERS");
 
     // trigger profile loop, wait for finish.
-    profile(args.clone(), tx, rt)?;
+    profile(args, tx, rt)?;
 
     // done.
     Ok(())
@@ -330,20 +330,20 @@ async fn process_and_sink_data(
     let mut stack_node_data_map: HashMap<u64, StackNodeData> = HashMap::new();
     let mut profiled_binary_map: HashMap<u64, ProfiledBinary> = HashMap::new();
     let mut basename: Option<String> = None;
-    if (args.binary.clone().unwrap().clone().contains("/")) {
+    if args.binary.clone().unwrap().contains('/') {
         basename = Some(
             args.clone()
                 .binary
-                .clone()
+                
                 .unwrap()
-                .clone()
-                .split("/")
+                
+                .split('/')
                 .last()
                 .unwrap()
                 .to_string(),
         );
     } else {
-        basename = Some(args.clone().binary.unwrap().to_string());
+        basename = Some(args.clone().binary.unwrap());
     }
 
     let profiled_binary = ProfiledBinary {
@@ -358,17 +358,17 @@ async fn process_and_sink_data(
         processed_data_size: 0,
     };
 
-    let cur_bin_id = profiled_binary.id;
+    let _cur_bin_id = profiled_binary.id;
     let mut parent_id: Option<u64> = None;
     for mut stack in symlist {
         // copy paste friendly
         profiled_binary_map
-            .entry(profiled_binary.id.clone())
-            .and_modify(|e| (*e).sample_count += 1)
-            .and_modify(|e| (*e).raw_data_size += (stack.deep_size_of() as u64))
+            .entry(profiled_binary.id)
+            .and_modify(|e| e.sample_count += 1)
+            .and_modify(|e| e.raw_data_size += stack.deep_size_of() as u64)
             .or_insert(profiled_binary.clone());
         stack.reverse();
-        for (i, &ref frame) in stack.iter().enumerate() {
+        for (_i, frame) in stack.iter().enumerate() {
             let mut data = StackNodeData {
                 id: 0,
                 symbol: cached_demangle(&frame.symbol).to_string(),
@@ -385,18 +385,18 @@ async fn process_and_sink_data(
             };
             id_data(&mut data);
             stack_node_data_map
-                .entry(data.id.clone())
+                .entry(data.id)
                 .or_insert(data.clone());
             let mut stack_node = StackNode {
                 id: 0,
-                parent_id: parent_id,
+                parent_id,
                 stack_node_data_id: data.id,
                 profiled_binary_id: profiled_binary.id,
                 sample_count: 1,
             };
             id_stack_node(&mut stack_node);
             stack_node_map
-                .entry(stack_node.id.clone())
+                .entry(stack_node.id)
                 .and_modify(|e| e.sample_count += 1)
                 .or_insert(stack_node.clone());
             parent_id = Some(stack_node.id);
@@ -404,20 +404,20 @@ async fn process_and_sink_data(
         parent_id = None;
     }
 
-    let mut data_out = StoData {
+    let data_out = StoData {
         stack_nodes: stack_node_map.values().map(|x| (*x).clone()).collect(),
         stack_node_datas: stack_node_data_map.values().map(|x| (*x).clone()).collect(),
         profiled_binaries: profiled_binary_map.values().map(|x| (*x).clone()).collect(),
     };
 
     profiled_binary_map
-        .entry(profiled_binary.id.clone())
-        .and_modify(|e| (*e).processed_data_size += (data_out.deep_size_of() as u64));
+        .entry(profiled_binary.id)
+        .and_modify(|e| e.processed_data_size += data_out.deep_size_of() as u64);
 
     let client = reqwest::Client::new();
     match client.post(args.url).json(&data_out).send().await {
         Ok(x) => match x.error_for_status() {
-            Ok(x) => {}
+            Ok(_x) => {}
             Err(x) => {
                 error!("failed to post data: {}", x);
             }
@@ -440,7 +440,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut child: Option<Child> = None;
     if args.pid == 0 {
         if let Some(binary) = args.binary.clone() {
-            let status = Command::new(binary.to_string()).spawn()?;
+            let status = Command::new(&binary).spawn()?;
             args.pid = status.id();
             child = Some(status);
         }
@@ -465,12 +465,12 @@ async fn main() -> Result<(), anyhow::Error> {
             break;
         }
         if task.is_finished() {
-            LAST_UPDATED.store(0 as usize, Ordering::SeqCst);
+            LAST_UPDATED.store(0_usize, Ordering::SeqCst);
             task = tokio::spawn(process(args.clone(), rt.clone(), false));
         }
     }
 
-    if child.is_some().clone() {
+    if child.is_some() {
         // race condition.
         child.as_mut().unwrap().kill();
         process::exit(-1);
