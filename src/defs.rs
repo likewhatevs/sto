@@ -10,6 +10,11 @@ use once_cell::sync::Lazy;
 use serde_derive::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::sync::Arc;
+use tera::ast::Set;
+#[macro_use]
+use enum_display_derive;
+use std::fmt::Display;
+use deepsize::DeepSizeOf;
 
 pub const READ_TASK_COUNT: usize = 10000000;
 pub const PROCESS_TASK_COUNT: usize = 100;
@@ -24,7 +29,7 @@ pub static DATAS: Lazy<Arc<DashMap<u64, StackNodeData>>> = Lazy::new(|| Arc::new
 pub static BINARIES: Lazy<Arc<DashMap<u64, ProfiledBinary>>> =
     Lazy::new(|| Arc::new(DashMap::new()));
 
-#[derive(ValueEnum, Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(ValueEnum, Debug, Serialize, Deserialize, Clone, Copy, enum_display_derive::Display)]
 pub enum EventType {
     Cycles,
     Clock,
@@ -41,21 +46,22 @@ pub struct Args {
     pub event_type: EventType,
     #[arg(short, long, default_value_t = 100000, help = "sample frequency.")]
     pub sample_freq: u64,
-    #[arg(short, long, help = "path to binary (to be used instead of pid)")]
+    #[arg(short, long, help = "path to binary (or binary name if pid provided)")]
     pub binary: Option<String>,
     #[arg(
         short,
         long,
-        help = "if present, write parsed data to provided postgresql."
+        help = "write data to the specified url",
+        default_value = "http://localhost:8000/data/samples"
     )]
-    pub db: Option<String>,
+    pub url: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct StoDataMaps {
-    pub stack_nodes: Arc<DashMap<u64, StackNode>>,
-    pub stack_node_datas: Arc<DashMap<u64, StackNodeData>>,
-    pub profiled_binaries: Arc<DashMap<u64, ProfiledBinary>>,
+#[derive(Debug, Serialize, Deserialize, Clone, DeepSizeOf)]
+pub struct StoData {
+    pub stack_nodes: Vec<StackNode>,
+    pub stack_node_datas: Vec<StackNodeData>,
+    pub profiled_binaries: Vec<ProfiledBinary>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,30 +70,38 @@ pub struct StackInfo {
     pub args: Args,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, Hash, Eq, PartialEq, DeepSizeOf)]
 pub struct ProfiledBinary {
     pub id: u64,
     pub event: String,
-    pub build_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub build_id: Option<String>,
     pub basename: String,
-    pub updated_at: DateTime<Utc>,
-    pub created_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<DateTime<Utc>>,
     pub sample_count: u64,
+    pub raw_data_size: u64,
+    pub processed_data_size: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, Hash, Eq, PartialEq, DeepSizeOf)]
 pub struct StackNode {
     pub id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<u64>,
     pub stack_node_data_id: u64,
     pub profiled_binary_id: u64,
     pub sample_count: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, Hash, Eq, PartialEq, DeepSizeOf)]
 pub struct StackNodeData {
     pub id: u64,
     pub symbol: String,
-    pub file: String,
-    pub line_number: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line_number: Option<u32>,
 }

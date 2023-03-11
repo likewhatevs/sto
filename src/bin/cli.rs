@@ -7,46 +7,100 @@ use std::cmp::min;
 use libbpf_rs::RingBufferBuilder;
 use perf_event_open_sys as perf;
 use std::collections::HashMap;
-use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::process::{Child, Command};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::thread;
+use std::{process, thread};
+use std::default::Default;
+use std::future::Future;
+use std::sync::mpsc::{channel, RecvError, sync_channel, SyncSender};
+use std::time::{SystemTime, UNIX_EPOCH};
+use ahash::AHasher;
+use async_ctrlc::CtrlC;
+use cached::instant::now;
+use deadqueue::limited::Queue;
+use deepsize::DeepSizeOf;
+use futures::TryFutureExt;
+use highway::{HighwayHash, HighwayHasher};
 use sto::bpftune::bpftune_bss_types::stacktrace_event;
-use sto::defs::{
-    Args, EventType, ProcessQueue, ReadQueue, StackInfo, PROCESS_TASK_COUNT, READ_TASK_COUNT,
-    WORKER_COUNT,
-};
+use sto::defs::{Args, EventType, ProcessQueue, ReadQueue, StackInfo, PROCESS_TASK_COUNT, READ_TASK_COUNT, WORKER_COUNT, StackNodeData, HASHER_SEED, StoData, ProfiledBinary, StackNode};
 extern crate clap;
 extern crate num_cpus;
 use libbpf_rs::libbpf_sys::pid_t;
 use libc::{exit, getrlimit, setrlimit};
-use log::{error, info};
+use log::{debug, error, info};
+use moka::sync::Cache;
+use once_cell::sync::{Lazy, OnceCell};
 use perf::perf_event_open;
+use reqwest::{Error, Response};
 use rlimit::Resource;
+use rocket::data::ToByteUnit;
 use rocket::form::validate::Len;
+use rocket::http::ext::IntoCollection;
+use symbolic_demangle::{Demangle, DemangleOptions};
+use tokio::runtime::Handle;
 use sto::bpftune::*;
 
+static SYM_CACHE: Lazy<Cache<String, String, ahash::RandomState>> = Lazy::new(|| {
+    Cache::builder()
+        .weigher(|key: &String, _value: &String| -> u32 {
+            key.len().try_into().unwrap_or(u32::MAX)
+        })
+        .max_capacity(32 * 1024 * 1024)
+        .build_with_hasher(ahash::RandomState::default())
+});
+
+static DATA_ID_CACHE: Lazy<Cache<StackNodeData, u64, ahash::RandomState>> = Lazy::new(|| {
+ Cache::builder()
+    .weigher(|key: &StackNodeData, _value: &u64| -> u32 {
+        key.symbol.len().try_into().unwrap_or(u32::MAX)+key.file.len().try_into().unwrap_or(u32::MAX)
+    })
+    .max_capacity(32 * 1024 * 1024)
+     .build_with_hasher(ahash::RandomState::default())
+});
+
+static NODE_ID_CACHE: Lazy<Cache<StackNode, u64, ahash::RandomState>> = Lazy::new(|| {
+    Cache::builder()
+        .max_capacity(8 * 1024 * 1024)
+        .build_with_hasher(ahash::RandomState::default())
+});
+
+static MISC_ID_CACHE: Lazy<Cache<String, u64, ahash::RandomState>> = Lazy::new(|| {
+    Cache::builder()
+        .weigher(|key: &String, _value: &u64| -> u32 {
+            key.len().try_into().unwrap_or(u32::MAX)
+        })
+        .max_capacity(2 * 1024 * 1024)
+        .build_with_hasher(ahash::RandomState::default())
+});
+
+static RQ: Lazy<Arc<Queue<StackInfo>>> = Lazy::new(|| Arc::new(ReadQueue::new(READ_TASK_COUNT)));
+static PQ: Lazy<Arc<Queue<Vec<Vec<SymbolizedResult>>>>> = Lazy::new(|| Arc::new(ProcessQueue::new(PROCESS_TASK_COUNT)));
+
+static LAST_UPDATED: Lazy<Arc<AtomicUsize>> = Lazy::new(|| Arc::new(AtomicUsize::new(0)));
+
 fn bump_memlock_rlimit() -> Result<()> {
-    // let (ml_soft, ml_hard) = Resource::get(rlimit::Resource::MEMLOCK)?;
-    // if min(ml_soft, ml_hard) < 128 << 20 {
-    //     match Resource::set(Resource::MEMLOCK, 128<<20,128<<20){
-    //         Ok(x) => {
-    //             info!("raised ulimit.");
-    //         },
-    //         Err(x) => {
-    //             bail!("unable to raise memlock limit and memlock limit uncomfortably low. \
-    //                    please run the following command and retry:\n\
-    //                    ulimit -l 134217728\n\
-    //                    if that fails (probably will), follow these instructions: \n\
-    //                    https://unix.stackexchange.com/a/359418 and retry that.\n\
-    //                    *alternatively*, just re-run this with sudo");
-    //         }
-    //     }
-    // }
+    let (ml_soft, ml_hard) = Resource::get(rlimit::Resource::MEMLOCK)?;
+    if min(ml_soft, ml_hard) < 128 << 20 {
+        match Resource::set(Resource::MEMLOCK, 128<<20,128<<20){
+            Ok(x) => {
+                info!("raised ulimit.");
+            },
+            Err(x) => {
+                bail!("unable to raise memlock limit and memlock limit uncomfortably low. \
+                       please run the following command and retry:\n\
+                       ulimit -l 134217728\n\
+                       if that fails (probably will), follow these instructions: \n\
+                       https://unix.stackexchange.com/a/359418 and retry that.\n\
+                       *alternatively*, just re-run this with sudo");
+            }
+        }
+    }
     Ok(())
 }
 
-fn profile(args: Args) -> Result<()> {
+fn profile(args: Args, tx: SyncSender<StackInfo>, rt: tokio::runtime::Handle) -> Result<()> {
+    info!("IN PROFILE");
     let skel_builder = BpftuneSkelBuilder::default();
     bump_memlock_rlimit()?;
     let skel_ = skel_builder.open()?;
@@ -60,12 +114,16 @@ fn profile(args: Args) -> Result<()> {
         if event.pid == 0 {
             return 0;
         }
-        symbolize(StackInfo { event: event, args: srsly_still_a_thing.clone() });
+        let guess_it_is = srsly_still_a_thing.clone();
+        let tx = tx.clone();
+        thread::spawn(move || tx.send(StackInfo { event: event, args: guess_it_is.clone() }).unwrap());
         0
     })?;
+
     thread::spawn(move || loop {});
 
     let rb = rbb.build()?;
+    info!("CREATED RING BUFFER");
 
     let mut perf_fds = HashMap::new();
 
@@ -100,138 +158,281 @@ fn profile(args: Args) -> Result<()> {
         perf_fds.insert(result, link);
     }
 
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })?;
-
-    while running.load(Ordering::SeqCst) {
+    let mut i = 0;
+    loop{
         rb.poll(Duration::from_millis(1))?;
+        i = i + 1;
+        if i >= 3000 {
+            i = 0;
+            let last_update = LAST_UPDATED.load(Ordering::SeqCst) as u64;
+            if SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() - last_update > 5 && last_update != 0 {
+                break;
+            };
+        }
     }
-
+    info!("DONE ONE RUN");
     perf_fds.capacity();
     Ok(())
 }
 
+fn cached_demangle(mangled : &str) -> String {
+    match SYM_CACHE.get(mangled) {
+        Some(hit) => {
+            hit
+        },
+        None => {
+            let name = symbolic_common::Name::from(mangled);
+            let demangled = name.try_demangle(DemangleOptions::name_only());
+            SYM_CACHE.insert(mangled.into(), demangled.clone().into());
+            demangled.into()
+            }
+        }
+    }
+
+fn misc_id(data: String) -> u64 {
+    match MISC_ID_CACHE.get(&data){
+        Some(x) => x,
+        None => {
+            let mut hasher = HighwayHasher::new(HASHER_SEED);
+            hasher.append(data.as_bytes());
+            let id: u64 = hasher.finalize64();
+            MISC_ID_CACHE.insert(data.clone(), id.clone());
+            id
+        }
+    }
+}
+
+fn id_stack_node(data : &mut StackNode){
+    let id = match NODE_ID_CACHE.get(&data) {
+        Some(hit) => {
+            hit
+        },
+        None => {
+            let mut hasher = HighwayHasher::new(HASHER_SEED);
+            if let Some(parent_id) = data.parent_id {
+                hasher.append(&parent_id.to_be_bytes());
+            }
+            hasher.append(&data.stack_node_data_id.to_be_bytes());
+            hasher.append(&data.profiled_binary_id.to_be_bytes());
+            let id: u64 = hasher.finalize64();
+            // should probably restructure this a bit because of 0 id in cache.
+            NODE_ID_CACHE.insert(data.clone(), id.clone());
+            id
+        }
+    };
+    data.id = id;
+}
+
+fn id_data(data : &mut StackNodeData) {
+    let id = match DATA_ID_CACHE.get(&data) {
+        Some(hit) => {
+            hit
+        },
+        None => {
+            let mut hasher = HighwayHasher::new(HASHER_SEED);
+            hasher.append(data.symbol.as_bytes());
+            if let Some(file) = data.clone().file {
+                hasher.append(file.as_bytes());
+            }
+            if let Some(line_number) = data.line_number {
+                hasher.append(&line_number.to_be_bytes());
+            }
+            let id: u64 = hasher.finalize64();
+            // should probably restructure this a bit because of 0 id in cache.
+            DATA_ID_CACHE.insert(data.clone(), id.clone());
+            id
+        }
+    };
+    data.id = id;
+}
+
+
 fn symbolize(stack_info: StackInfo) -> Vec<Vec<SymbolizedResult>> {
+    info!("IN SYMBOLIZE");
     let sym_srcs = [SymbolSrcCfg::Process {
         pid: Some(stack_info.args.pid),
     }];
     let symbolizer = BlazeSymbolizer::new_opt(&[SymbolizerFeature::LineNumberInfo(true)]).unwrap();
     let symlist = symbolizer.symbolize(&sym_srcs, stack_info.event.ustack.as_ref());
-    for i in 0..stack_info.event.ustack.len() {
-        let address = stack_info.event.ustack[i];
-        if symlist.len() <= i || symlist[i].is_empty() {
-            continue;
-        }
-        let sym_results = &symlist[i];
-        if sym_results.len() > 1 {
-            // One address may get several results (ex, inline code)
-            println!("0x{:x} ({} entries)", address, sym_results.len());
-
-            for result in sym_results {
-                let SymbolizedResult {
-                    symbol,
-                    start_address,
-                    path,
-                    line_no,
-                    column,
-                } = result;
-                println!(
-                    "    {}@0x{:#x} {}:{} {}",
-                    symbol, start_address, path, line_no, column
-                );
-                if path != ""{
-                       error!("found one");
-                    std::process::exit(0);
-                }
-            }
-        } else {
-            let SymbolizedResult {
-                symbol,
-                start_address,
-                path,
-                line_no,
-                column,
-            } = &sym_results[0];
-            println!("path: {}", path.clone());
-            println!(
-                "0x{:#x} {}@0x{:#x} {}:{} {}",
-                address, symbol, start_address, path, line_no, column
-            );
-            if path != ""{
-                error!("found one");
-                std::process::exit(0);
-            }
-        }
-    }
     symlist
 }
 
-async fn process(args: Args) -> Result<(), anyhow::Error> {
-    let rq = Arc::new(ReadQueue::new(READ_TASK_COUNT));
-    let pq = Arc::new(ProcessQueue::new(PROCESS_TASK_COUNT));
-    let start_rc = Arc::new(ConsistentCounter::new(0));
-    let done_rc = Arc::new(ConsistentCounter::new(0));
-    for _a in 1..WORKER_COUNT {
-        let rq_ref = rq.clone();
-        let pq_ref = pq.clone();
-        let start_rc_ref = start_rc.clone();
-        tokio::spawn(async move {
-            loop {
-                if (start_rc_ref.clone().get() as u32) >= args.total_samples {
-                    break;
+async fn process(args: Args, rt: tokio::runtime::Handle, init: bool) -> Result<(), anyhow::Error> {
+    info!("IN PROCESS");
+    let (tx, rx) = sync_channel(5000);
+
+    // let start_rc_ref = start_rc.clone();
+    let rti = rt.clone();
+    thread::spawn(move ||{
+        loop {
+            match rx.recv() {
+                Ok(data_chunk) => {
+                    LAST_UPDATED.store(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as usize, Ordering::SeqCst);
+                    let pq_ref = PQ.clone();
+                    info!("READ DATA");
+                    rti.clone().spawn(async move {pq_ref.push(symbolize(data_chunk)).await});
                 }
-                start_rc_ref.inc();
-                let data_chunk = rq_ref.pop().await;
-                pq_ref.push(symbolize(data_chunk)).await;
+                Err(_) => {
+                    // cleanup between runs (needs new rx).
+                    break
+                }
             }
-        });
-    }
+        }
+    });
+
+    // doesn't make sense to clean up between runs.
     for _a in 1..WORKER_COUNT {
-        let pq_ref = pq.clone();
-        let done_rc_ref = done_rc.clone();
+        let pq_ref = PQ.clone();
+        let i_arg = args.clone();
         tokio::spawn(async move {
             loop {
-                sink_data(pq_ref.pop().await).await.expect("err");
-                done_rc_ref.inc();
+                let ii_args = i_arg.clone();
+                process_and_sink_data(pq_ref.pop().await, ii_args.clone()).await.expect("err");
+                info!("SANK DATA");
             }
         });
     }
+    info!("SPAWNED WORKERS");
 
     // trigger profile loop, wait for finish.
-    profile(args)?;
+    profile(args.clone(), tx, rt)?;
 
-    // wait for post process finish.
-    while !pq.is_empty() && !rq.is_empty() && (start_rc.get() != done_rc.get()) {
-        tokio::time::sleep(Duration::from_millis(1)).await;
-    }
     // done.
     Ok(())
 }
 
-async fn sink_data(data: Vec<Vec<SymbolizedResult>>) -> Result<(), anyhow::Error> {
-    // hash and db insert.
-    drop(data);
+async fn process_and_sink_data(symlist: Vec<Vec<SymbolizedResult>>, args: Args) -> Result<(), anyhow::Error> {
+    info!("stack is");
+    let mut stack_node_map: HashMap<u64, StackNode> = HashMap::new();
+    let mut stack_node_data_map: HashMap<u64, StackNodeData> = HashMap::new();
+    let mut profiled_binary_map: HashMap<u64, ProfiledBinary> = HashMap::new();
+    let mut basename: Option<String> = None;
+    if(args.binary.clone().unwrap().clone().contains("/")){
+        basename = Some(args.clone().binary.clone().unwrap().clone().split("/").last().unwrap().to_string());
+    } else {
+        basename = Some(args.clone().binary.unwrap().to_string());
+    }
+
+    let profiled_binary = ProfiledBinary{
+        id: misc_id(args.binary.unwrap()),
+        event: args.event_type.to_string(),
+        build_id: None,
+        basename: basename.unwrap(),
+        updated_at: None,
+        created_at: None,
+        sample_count: 0,
+        raw_data_size: 0,
+        processed_data_size: 0,
+    };
+
+    let cur_bin_id = profiled_binary.id;
+    let mut parent_id: Option<u64> = None;
+    for mut stack in symlist {
+        // copy paste friendly
+        profiled_binary_map.entry(profiled_binary.id.clone())
+            .and_modify(|e| { (*e).sample_count += 1 })
+            .and_modify(|e| { (*e).raw_data_size += (stack.deep_size_of() as u64) })
+            .or_insert(profiled_binary.clone());
+        stack.reverse();
+        for (i, &ref frame) in stack.iter().enumerate() {
+            let mut data = StackNodeData {
+                id: 0,
+                symbol: cached_demangle(&frame.symbol).to_string(),
+                file: if frame.path.trim().is_empty() { None } else { Some(frame.path.trim().into()) },
+                line_number: if frame.line_no > 0 { Some(frame.line_no as u32) } else { None },
+            };
+            id_data(&mut data);
+            stack_node_data_map.entry(data.id.clone()).or_insert(data.clone());
+            let mut stack_node = StackNode{
+                id: 0,
+                parent_id: parent_id,
+                stack_node_data_id: data.id,
+                profiled_binary_id: profiled_binary.id,
+                sample_count: 1,
+            };
+            id_stack_node(&mut stack_node);
+            stack_node_map.entry(stack_node.id.clone()).and_modify(|e| {e.sample_count+=1}).or_insert(stack_node.clone());
+            parent_id = Some(stack_node.id);
+        }
+        parent_id = None;
+    }
+
+    let mut data_out = StoData{
+        stack_nodes: stack_node_map.values().map(|x| (*x).clone()).collect(),
+        stack_node_datas: stack_node_data_map.values().map(|x| (*x).clone()).collect(),
+        profiled_binaries: profiled_binary_map.values().map(|x| (*x).clone()).collect(),
+    };
+
+    profiled_binary_map.entry(profiled_binary.id.clone())
+        .and_modify(|e| { (*e).processed_data_size += (data_out.deep_size_of() as u64) });
+
+    let client = reqwest::Client::new();
+    match client.post(args.url)
+        .json(&data_out)
+        .send()
+        .await {
+        Ok(x) => {
+            match x.error_for_status() {
+                Ok(x) => {},
+                Err(x) =>{
+                    error!("failed to post data: {}", x);
+                }
+            }
+        },
+        Err(x) => {
+            error!("failed to post data: {}", x);
+        }
+    }
     Ok(())
 }
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    tracing_subscriber::fmt::init();
+    pretty_env_logger::init();
     let mut args = Args::parse();
     if args.pid == 0 && args.binary.is_none(){
-        error!("either pid or binary must be specified.");
+        error!("either pid and binary or binary must be specified.");
         std::process::exit(-1);
     }
+    let mut child: Option<Child> = None;
     if args.pid == 0 {
         if let Some(binary) = args.binary.clone() {
             let status = Command::new(binary.to_string()).spawn()?;
             args.pid = status.id();
+            child = Some(status);
+        }
+    } else if args.binary.is_none() {
+        error!("binary is unset, exiting");
+        std::process::exit(-1);
+    }
+
+    let rt = Handle::current();
+
+    let ctrlc = CtrlC::new().expect("cannot create Ctrl+C handler?");
+
+    let ctrlc = tokio::spawn(ctrlc);
+
+    let mut task = tokio::spawn(process(args.clone(), rt.clone(), true));
+
+    loop {
+        while !task.is_finished() && !ctrlc.is_finished() {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+        if ctrlc.is_finished() {
+            break;
+        }
+        if task.is_finished() {
+            LAST_UPDATED.store(0 as usize, Ordering::SeqCst);
+            task = tokio::spawn(process(args.clone(), rt.clone(), false));
         }
     }
 
-    process(args).await?;
+
+    if child.is_some().clone() {
+        // race condition.
+        child.as_mut().unwrap().kill();
+        process::exit(-1);
+    }
+
     Ok(())
 }
