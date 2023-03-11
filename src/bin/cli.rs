@@ -1,7 +1,6 @@
-
 use anyhow::{bail, Result};
 use async_ctrlc::CtrlC;
-use atomic_counter::{AtomicCounter};
+use atomic_counter::AtomicCounter;
 use blazesym::{BlazeSymbolizer, SymbolSrcCfg, SymbolizedResult, SymbolizerFeature};
 
 use clap::Parser;
@@ -33,7 +32,7 @@ use libbpf_rs::libbpf_sys::pid_t;
 
 use log::{error, info};
 use moka::sync::Cache;
-use once_cell::sync::{Lazy};
+use once_cell::sync::Lazy;
 use perf::perf_event_open;
 
 use rlimit::Resource;
@@ -334,9 +333,7 @@ async fn process_and_sink_data(
         basename = Some(
             args.clone()
                 .binary
-                
                 .unwrap()
-                
                 .split('/')
                 .last()
                 .unwrap()
@@ -384,9 +381,7 @@ async fn process_and_sink_data(
                 },
             };
             id_data(&mut data);
-            stack_node_data_map
-                .entry(data.id)
-                .or_insert(data.clone());
+            stack_node_data_map.entry(data.id).or_insert(data.clone());
             let mut stack_node = StackNode {
                 id: 0,
                 parent_id,
