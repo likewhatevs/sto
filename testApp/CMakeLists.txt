@@ -1,8 +1,14 @@
 cmake_minimum_required(VERSION 3.22.0)
+
+set(CMAKE_VERBOSE_MAKEFILE on)
+set(CMAKE_C_COMPILER "clang")
+set(CMAKE_CXX_COMPILER "clang++")
+option(USE_CLANG "build application with clang" ON)
+
 project(burn)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
-add_executable(${PROJECT_NAME} main.cpp)
+add_executable(${PROJECT_NAME} main.cpp main.h main.h)
 find_package(glog)
 find_package(gflags)
 find_package(folly)
@@ -14,7 +20,8 @@ target_link_libraries(${PROJECT_NAME} folly)
 target_link_libraries(${PROJECT_NAME} gflags)
 target_link_libraries(${PROJECT_NAME} glog)
 target_link_libraries(${PROJECT_NAME} double-conversion)
+target_link_libraries(${PROJECT_NAME} atomic)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON BOOL "Enable/Disable output of compile commands during generation.")
-add_compile_options(-fno-omit-frame-pointer -g)
-
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -gstrict-dwarf -gdwarf-4")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer -gstrict-dwarf -gdwarf-4")

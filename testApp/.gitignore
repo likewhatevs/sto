@@ -10,3 +10,4 @@ CMakeFile
 *.cbp
 CMakeFiles
 Testing
+build

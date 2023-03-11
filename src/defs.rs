@@ -1,9 +1,9 @@
+use std::path::Path;
 use crate::bpftune::bpftune_bss_types::stacktrace_event;
 use blazesym::SymbolizedResult;
 use chrono::{DateTime, Utc};
 use clap::{arg, command};
 use clap::{Parser, ValueEnum};
-use copystr::CopyStringCapacity;
 use dashmap::DashMap;
 use highway::Key;
 use once_cell::sync::Lazy;
@@ -30,10 +30,10 @@ pub enum EventType {
     Clock,
 }
 
-#[derive(Parser, Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Parser, Debug, Serialize, Deserialize, Clone)]
 #[command(author, version, about, long_about = "Do stuff")]
 pub struct Args {
-    #[arg(short, long, required = true)]
+    #[arg(short, long, default_value_t = 0, help = "to profile a running process")]
     pub pid: u32,
     #[arg(short, long, default_value_t = 100000)]
     pub total_samples: u32,
@@ -41,12 +41,14 @@ pub struct Args {
     pub event_type: EventType,
     #[arg(short, long, default_value_t = 100000, help = "sample frequency.")]
     pub sample_freq: u64,
+    #[arg(short, long, help = "path to binary (to be used instead of pid)")]
+    pub binary: Option<String>,
     #[arg(
         short,
         long,
         help = "if present, write parsed data to provided postgresql."
     )]
-    pub db: Option<CopyStringCapacity>,
+    pub db: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

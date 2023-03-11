@@ -19,11 +19,12 @@ use rocket::http::ContentType;
 use rust_embed::RustEmbed;
 use chrono::{DateTime, Utc};
 use chrono::format::Numeric::Day;
+use rocket::serde::msgpack::MsgPack;
 
 #[macro_use]
 extern crate rocket;
 use serde_json::json;
-use sto::defs::ProfiledBinary;
+use sto::defs::{ProfiledBinary, StoDataMaps};
 
 #[macro_use]
 extern crate log;
@@ -58,9 +59,13 @@ fn dist(file: PathBuf) -> Option<(ContentType, Cow<'static, [u8]>)> {
     Some((content_type, asset.data))
 }
 
+// #[post("/data/samples")]
+// fn data_ingest(MsgPack<StoDataMaps>: data){
+//
+// }
 
 
-#[get("/data/<id>")]
+#[get("/dag/<id>")]
 fn data(id: u64) -> Json<D3FlamegraphData> {
     if id == 123{
         return Json(D3FlamegraphData {

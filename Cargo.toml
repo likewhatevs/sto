@@ -16,7 +16,6 @@ serde = { version = "1", features = ["rc"] }
 serde_json= "1"
 dashmap = { version = "5", features = ["serde"] }
 anyhow = "1"
-regex = "1"
 lazy_static = "1"
 tokio = { version = "1", features = ["full"] }
 once_cell = "1"
@@ -26,6 +25,7 @@ tera = "1"
 futures = "0"
 atomic-counter = "1"
 chrono = { version = "0", features = ["serde"] }
+#blazesym = { path="./blazesym" }
 blazesym = "0"
 num_cpus = "1"
 perf-event-open-sys = "4"
@@ -33,18 +33,22 @@ libc = "0"
 ctrlc = "3"
 plain = "0"
 libbpf-rs = "0"
-copystr = { version = "0", features = [ "serde" ] }
 rust-embed = "6"
 async-trait = "0"
-sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls" , "postgres", "chrono", "macros", "json", ] }
+sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls" , "postgres", "chrono", "macros", "json"] }
 dotenvy = "0"
-rocket = { version = "0.5.0-rc.2", features = ["json"] }
+rocket = { version = "0.5.0-rc.2", features = ["json", "msgpack"] }
 rocket-include-tera = "0"
 rocket_db_pools = {version = "0.1.0-rc.2", features = ["sqlx_postgres"]}
 rocket_dyn_templates = { version = "0.1.0-rc.2" , features = ["tera"]}
 tracing-subscriber = "0"
 tracing = "0"
-
+ahash = "0"
+moka = { version = "0", features = ["future"] }
+rocket_async_compression = "0.2.0"
+reqwest = { version = "0", features = ["json", "rustls-tls", "brotli"] }
+rlimit = "0"
+symbolic-demangle = "12"
 
 [build-dependencies]
 libbpf-cargo = "0"
@@ -53,4 +57,4 @@ libbpf-cargo = "0"
 lto = true
 opt-level = 3
 codegen-units = 1
-rustflags = ["-Ctarget-cpu=native", "-Ztune-cpu=machine", "--cfg sqlx_macros_unstable"]
+rustflags = ["-Ctarget-cpu=native", "-Ztune-cpu=native", "--cfg=sqlx_macros_unstable"]

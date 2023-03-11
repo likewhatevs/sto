@@ -151,7 +151,7 @@ https://cdn.jsdelivr.net/npm/jsgrid@1.5.3/dist/jsgrid.min.js
 
         // Example of how to set fixed chart height
         // flameGraph.height(540);
-        axios.get("/data/1").then(function (response) {
+        axios.get("/dag/1").then(function (response) {
             d3.select("#chart").datum(response.data).call(flameGraph);
         });
 
@@ -163,7 +163,7 @@ https://cdn.jsdelivr.net/npm/jsgrid@1.5.3/dist/jsgrid.min.js
 
         $("#dataBtn").click(function (){
             var term = document.getElementById("dataSelector").value;
-            axios.get("/data/"+term).then(function (response) {
+            axios.get("/dag/"+term).then(function (response) {
                 flameGraph.clear();
                 d3.select("#chart").datum(response.data).call(flameGraph);
             });

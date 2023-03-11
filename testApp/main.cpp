@@ -1,19 +1,4 @@
-#include <iostream>
-#include <folly/init/Init.h>
-#include <folly/experimental/coro/Task.h>
-#include <folly/experimental/coro/BlockingWait.h>
-#include <folly/experimental/coro/AsyncScope.h>
-#include <folly/experimental/coro/Mutex.h>
-#include <gflags/gflags.h>
-#include <folly/Conv.h>
-#include <folly/logging/xlog.h>
-#include <folly/logging/LogLevel.h>
-#include <chrono>
-#include <folly/concurrency/ConcurrentHashMap.h>
-#include <folly/Random.h>
-#include <csignal>
-#include <cstdlib>
-#include <unistd.h>
+#include <main.h>
 
 using namespace std;
 using namespace folly;
