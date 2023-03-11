@@ -1,4 +1,3 @@
-use std::path::Path;
 use crate::bpftune::bpftune_bss_types::stacktrace_event;
 use blazesym::SymbolizedResult;
 use chrono::{DateTime, Utc};
@@ -9,12 +8,13 @@ use highway::Key;
 use once_cell::sync::Lazy;
 use serde_derive::{Deserialize, Serialize};
 use sqlx::FromRow;
+use std::path::Path;
 use std::sync::Arc;
 use tera::ast::Set;
 #[macro_use]
 use enum_display_derive;
-use std::fmt::Display;
 use deepsize::DeepSizeOf;
+use std::fmt::Display;
 
 pub const READ_TASK_COUNT: usize = 10000000;
 pub const PROCESS_TASK_COUNT: usize = 100;
@@ -38,7 +38,12 @@ pub enum EventType {
 #[derive(Parser, Debug, Serialize, Deserialize, Clone)]
 #[command(author, version, about, long_about = "Do stuff")]
 pub struct Args {
-    #[arg(short, long, default_value_t = 0, help = "to profile a running process")]
+    #[arg(
+        short,
+        long,
+        default_value_t = 0,
+        help = "to profile a running process"
+    )]
     pub pid: u32,
     #[arg(short, long, default_value_t = 100000)]
     pub total_samples: u32,

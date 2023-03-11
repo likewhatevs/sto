@@ -1,33 +1,33 @@
-use std::borrow::Cow;
-use once_cell::sync::OnceCell;
 use anyhow::Result;
+use once_cell::sync::OnceCell;
+use std::borrow::Cow;
 
 use dotenvy::dotenv;
 
+use chrono::format::Numeric::Day;
+use chrono::{DateTime, Utc};
+use reqwest::header::{REFERER, REFRESH};
+use rocket::http::{ContentType, Header};
+use rocket::response::Redirect;
 use rocket::serde::json::Json;
+use rocket::serde::msgpack::MsgPack;
 use rocket::{Build, Response, Rocket, State};
 use rocket_include_tera::{
     tera_resources_initialize, tera_response, tera_response_cache, EtagIfNoneMatch,
     TeraContextManager, TeraResponse,
 };
+use rust_embed::RustEmbed;
 use serde_derive::{Deserialize, Serialize};
 use sqlx::migrate::Migrator;
 use sqlx::postgres::PgPoolOptions;
 use std::env;
 use std::ffi::OsStr;
 use std::path::PathBuf;
-use rocket::http::{ContentType, Header};
-use rust_embed::RustEmbed;
-use chrono::{DateTime, Utc};
-use chrono::format::Numeric::Day;
-use reqwest::header::{REFERER, REFRESH};
-use rocket::response::Redirect;
-use rocket::serde::msgpack::MsgPack;
 
 #[macro_use]
 extern crate rocket;
 use serde_json::json;
-use sqlx::{Connection, Pool, Postgres, query, QueryBuilder};
+use sqlx::{query, Connection, Pool, Postgres, QueryBuilder};
 use sto::defs::{ProfiledBinary, StoData};
 
 #[macro_use]
@@ -138,13 +138,11 @@ async fn data_ingest(data: Json<StoData>) {
             q3.execute(&mut *conn).await
         })
     );
-
 }
-
 
 #[get("/dag/<id>")]
 async fn data(id: u64) -> Json<D3FlamegraphData> {
-    if id == 123{
+    if id == 123 {
         return Json(D3FlamegraphData {
             name: "asdasda".to_string(),
             value: 12,
@@ -166,7 +164,7 @@ async fn data(id: u64) -> Json<D3FlamegraphData> {
                     children: None,
                 },
             ]),
-        })
+        });
     } else {
         Json(D3FlamegraphData {
             name: "select data to start!".to_string(),
@@ -178,16 +176,15 @@ async fn data(id: u64) -> Json<D3FlamegraphData> {
     }
 }
 
-
 #[get("/list")]
 async fn list() -> Json<Vec<ProfiledBinary>> {
-    Json(vec![ProfiledBinary{
+    Json(vec![ProfiledBinary {
         id: 123,
         event: "CYCLE".to_string(),
         build_id: Some("whatevs".to_string()),
         basename: "binary".to_string(),
         updated_at: Some(Utc::now()),
-        created_at: Some(Utc::now()- chrono::Duration::days(1)),
+        created_at: Some(Utc::now() - chrono::Duration::days(1)),
         sample_count: 10,
         raw_data_size: 0,
         processed_data_size: 0,
@@ -195,15 +192,21 @@ async fn list() -> Json<Vec<ProfiledBinary>> {
 }
 
 #[get("/")]
-async fn index(cm: &State<TeraContextManager>, etag_if_none_match: EtagIfNoneMatch<'_>) -> TeraResponse {
+async fn index(
+    cm: &State<TeraContextManager>,
+    etag_if_none_match: EtagIfNoneMatch<'_>,
+) -> TeraResponse {
     tera_response_cache!(cm, etag_if_none_match, "index", {
         println!("Generate index-2 and cache it...");
-        tera_response!(cm, EtagIfNoneMatch::default(), "index",
+        tera_response!(
+            cm,
+            EtagIfNoneMatch::default(),
+            "index",
             json!({"binaries":[{"name": "somename", "id": 123, "version": 1,
-            "date": Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()}]}))
+            "date": Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()}]})
+        )
     })
 }
-
 
 #[rocket::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -212,12 +215,16 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let db = env::var("DATABASE_URL").expect("error, DATABASE_URL envvar must be set.");
 
-    DB_POOL.set(PgPoolOptions::new()
-        .max_connections(100)
-        .connect(db.as_str())
-        .await?);
+    DB_POOL.set(
+        PgPoolOptions::new()
+            .max_connections(100)
+            .connect(db.as_str())
+            .await?,
+    );
 
-    MIGRATOR.run(DB_POOL.get().expect("err getting db pool")).await?;
+    MIGRATOR
+        .run(DB_POOL.get().expect("err getting db pool"))
+        .await?;
 
     let _rocket = rocket::build()
         .attach(TeraResponse::fairing(|tera| {

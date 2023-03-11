@@ -1,29 +1,32 @@
+use ahash::AHasher;
 use anyhow::{bail, Result};
+use async_ctrlc::CtrlC;
 use atomic_counter::{AtomicCounter, ConsistentCounter};
 use blazesym::{BlazeSymbolizer, SymbolSrcCfg, SymbolizedResult, SymbolizerFeature};
+use cached::instant::now;
 use clap::Parser;
 use core::time::Duration;
-use std::cmp::min;
-use libbpf_rs::RingBufferBuilder;
-use perf_event_open_sys as perf;
-use std::collections::HashMap;
-use std::process::{Child, Command};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::{process, thread};
-use std::default::Default;
-use std::future::Future;
-use std::sync::mpsc::{channel, RecvError, sync_channel, SyncSender};
-use std::time::{SystemTime, UNIX_EPOCH};
-use ahash::AHasher;
-use async_ctrlc::CtrlC;
-use cached::instant::now;
 use deadqueue::limited::Queue;
 use deepsize::DeepSizeOf;
 use futures::TryFutureExt;
 use highway::{HighwayHash, HighwayHasher};
+use libbpf_rs::RingBufferBuilder;
+use perf_event_open_sys as perf;
+use std::cmp::min;
+use std::collections::HashMap;
+use std::default::Default;
+use std::future::Future;
+use std::process::{Child, Command};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::mpsc::{channel, sync_channel, RecvError, SyncSender};
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+use std::{process, thread};
 use sto::bpftune::bpftune_bss_types::stacktrace_event;
-use sto::defs::{Args, EventType, ProcessQueue, ReadQueue, StackInfo, PROCESS_TASK_COUNT, READ_TASK_COUNT, WORKER_COUNT, StackNodeData, HASHER_SEED, StoData, ProfiledBinary, StackNode};
+use sto::defs::{
+    Args, EventType, ProcessQueue, ProfiledBinary, ReadQueue, StackInfo, StackNode, StackNodeData,
+    StoData, HASHER_SEED, PROCESS_TASK_COUNT, READ_TASK_COUNT, WORKER_COUNT,
+};
 extern crate clap;
 extern crate num_cpus;
 use libbpf_rs::libbpf_sys::pid_t;
@@ -37,9 +40,9 @@ use rlimit::Resource;
 use rocket::data::ToByteUnit;
 use rocket::form::validate::Len;
 use rocket::http::ext::IntoCollection;
+use sto::bpftune::*;
 use symbolic_demangle::{Demangle, DemangleOptions};
 use tokio::runtime::Handle;
-use sto::bpftune::*;
 
 static SYM_CACHE: Lazy<Cache<String, String, ahash::RandomState>> = Lazy::new(|| {
     Cache::builder()
@@ -51,12 +54,13 @@ static SYM_CACHE: Lazy<Cache<String, String, ahash::RandomState>> = Lazy::new(||
 });
 
 static DATA_ID_CACHE: Lazy<Cache<StackNodeData, u64, ahash::RandomState>> = Lazy::new(|| {
- Cache::builder()
-    .weigher(|key: &StackNodeData, _value: &u64| -> u32 {
-        key.symbol.len().try_into().unwrap_or(u32::MAX)+key.file.len().try_into().unwrap_or(u32::MAX)
-    })
-    .max_capacity(32 * 1024 * 1024)
-     .build_with_hasher(ahash::RandomState::default())
+    Cache::builder()
+        .weigher(|key: &StackNodeData, _value: &u64| -> u32 {
+            key.symbol.len().try_into().unwrap_or(u32::MAX)
+                + key.file.len().try_into().unwrap_or(u32::MAX)
+        })
+        .max_capacity(32 * 1024 * 1024)
+        .build_with_hasher(ahash::RandomState::default())
 });
 
 static NODE_ID_CACHE: Lazy<Cache<StackNode, u64, ahash::RandomState>> = Lazy::new(|| {
@@ -67,32 +71,33 @@ static NODE_ID_CACHE: Lazy<Cache<StackNode, u64, ahash::RandomState>> = Lazy::ne
 
 static MISC_ID_CACHE: Lazy<Cache<String, u64, ahash::RandomState>> = Lazy::new(|| {
     Cache::builder()
-        .weigher(|key: &String, _value: &u64| -> u32 {
-            key.len().try_into().unwrap_or(u32::MAX)
-        })
+        .weigher(|key: &String, _value: &u64| -> u32 { key.len().try_into().unwrap_or(u32::MAX) })
         .max_capacity(2 * 1024 * 1024)
         .build_with_hasher(ahash::RandomState::default())
 });
 
 static RQ: Lazy<Arc<Queue<StackInfo>>> = Lazy::new(|| Arc::new(ReadQueue::new(READ_TASK_COUNT)));
-static PQ: Lazy<Arc<Queue<Vec<Vec<SymbolizedResult>>>>> = Lazy::new(|| Arc::new(ProcessQueue::new(PROCESS_TASK_COUNT)));
+static PQ: Lazy<Arc<Queue<Vec<Vec<SymbolizedResult>>>>> =
+    Lazy::new(|| Arc::new(ProcessQueue::new(PROCESS_TASK_COUNT)));
 
 static LAST_UPDATED: Lazy<Arc<AtomicUsize>> = Lazy::new(|| Arc::new(AtomicUsize::new(0)));
 
 fn bump_memlock_rlimit() -> Result<()> {
     let (ml_soft, ml_hard) = Resource::get(rlimit::Resource::MEMLOCK)?;
     if min(ml_soft, ml_hard) < 128 << 20 {
-        match Resource::set(Resource::MEMLOCK, 128<<20,128<<20){
+        match Resource::set(Resource::MEMLOCK, 128 << 20, 128 << 20) {
             Ok(x) => {
                 info!("raised ulimit.");
-            },
+            }
             Err(x) => {
-                bail!("unable to raise memlock limit and memlock limit uncomfortably low. \
+                bail!(
+                    "unable to raise memlock limit and memlock limit uncomfortably low. \
                        please run the following command and retry:\n\
                        ulimit -l 134217728\n\
                        if that fails (probably will), follow these instructions: \n\
                        https://unix.stackexchange.com/a/359418 and retry that.\n\
-                       *alternatively*, just re-run this with sudo");
+                       *alternatively*, just re-run this with sudo"
+                );
             }
         }
     }
@@ -116,7 +121,13 @@ fn profile(args: Args, tx: SyncSender<StackInfo>, rt: tokio::runtime::Handle) ->
         }
         let guess_it_is = srsly_still_a_thing.clone();
         let tx = tx.clone();
-        thread::spawn(move || tx.send(StackInfo { event: event, args: guess_it_is.clone() }).unwrap());
+        thread::spawn(move || {
+            tx.send(StackInfo {
+                event: event,
+                args: guess_it_is.clone(),
+            })
+            .unwrap()
+        });
         0
     })?;
 
@@ -159,13 +170,20 @@ fn profile(args: Args, tx: SyncSender<StackInfo>, rt: tokio::runtime::Handle) ->
     }
 
     let mut i = 0;
-    loop{
+    loop {
         rb.poll(Duration::from_millis(1))?;
         i = i + 1;
         if i >= 3000 {
             i = 0;
             let last_update = LAST_UPDATED.load(Ordering::SeqCst) as u64;
-            if SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() - last_update > 5 && last_update != 0 {
+            if SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                - last_update
+                > 5
+                && last_update != 0
+            {
                 break;
             };
         }
@@ -175,22 +193,20 @@ fn profile(args: Args, tx: SyncSender<StackInfo>, rt: tokio::runtime::Handle) ->
     Ok(())
 }
 
-fn cached_demangle(mangled : &str) -> String {
+fn cached_demangle(mangled: &str) -> String {
     match SYM_CACHE.get(mangled) {
-        Some(hit) => {
-            hit
-        },
+        Some(hit) => hit,
         None => {
             let name = symbolic_common::Name::from(mangled);
             let demangled = name.try_demangle(DemangleOptions::name_only());
             SYM_CACHE.insert(mangled.into(), demangled.clone().into());
             demangled.into()
-            }
         }
     }
+}
 
 fn misc_id(data: String) -> u64 {
-    match MISC_ID_CACHE.get(&data){
+    match MISC_ID_CACHE.get(&data) {
         Some(x) => x,
         None => {
             let mut hasher = HighwayHasher::new(HASHER_SEED);
@@ -202,11 +218,9 @@ fn misc_id(data: String) -> u64 {
     }
 }
 
-fn id_stack_node(data : &mut StackNode){
+fn id_stack_node(data: &mut StackNode) {
     let id = match NODE_ID_CACHE.get(&data) {
-        Some(hit) => {
-            hit
-        },
+        Some(hit) => hit,
         None => {
             let mut hasher = HighwayHasher::new(HASHER_SEED);
             if let Some(parent_id) = data.parent_id {
@@ -223,11 +237,9 @@ fn id_stack_node(data : &mut StackNode){
     data.id = id;
 }
 
-fn id_data(data : &mut StackNodeData) {
+fn id_data(data: &mut StackNodeData) {
     let id = match DATA_ID_CACHE.get(&data) {
-        Some(hit) => {
-            hit
-        },
+        Some(hit) => hit,
         None => {
             let mut hasher = HighwayHasher::new(HASHER_SEED);
             hasher.append(data.symbol.as_bytes());
@@ -246,7 +258,6 @@ fn id_data(data : &mut StackNodeData) {
     data.id = id;
 }
 
-
 fn symbolize(stack_info: StackInfo) -> Vec<Vec<SymbolizedResult>> {
     info!("IN SYMBOLIZE");
     let sym_srcs = [SymbolSrcCfg::Process {
@@ -263,18 +274,25 @@ async fn process(args: Args, rt: tokio::runtime::Handle, init: bool) -> Result<(
 
     // let start_rc_ref = start_rc.clone();
     let rti = rt.clone();
-    thread::spawn(move ||{
+    thread::spawn(move || {
         loop {
             match rx.recv() {
                 Ok(data_chunk) => {
-                    LAST_UPDATED.store(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as usize, Ordering::SeqCst);
+                    LAST_UPDATED.store(
+                        SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs() as usize,
+                        Ordering::SeqCst,
+                    );
                     let pq_ref = PQ.clone();
                     info!("READ DATA");
-                    rti.clone().spawn(async move {pq_ref.push(symbolize(data_chunk)).await});
+                    rti.clone()
+                        .spawn(async move { pq_ref.push(symbolize(data_chunk)).await });
                 }
                 Err(_) => {
                     // cleanup between runs (needs new rx).
-                    break
+                    break;
                 }
             }
         }
@@ -287,7 +305,9 @@ async fn process(args: Args, rt: tokio::runtime::Handle, init: bool) -> Result<(
         tokio::spawn(async move {
             loop {
                 let ii_args = i_arg.clone();
-                process_and_sink_data(pq_ref.pop().await, ii_args.clone()).await.expect("err");
+                process_and_sink_data(pq_ref.pop().await, ii_args.clone())
+                    .await
+                    .expect("err");
                 info!("SANK DATA");
             }
         });
@@ -301,19 +321,32 @@ async fn process(args: Args, rt: tokio::runtime::Handle, init: bool) -> Result<(
     Ok(())
 }
 
-async fn process_and_sink_data(symlist: Vec<Vec<SymbolizedResult>>, args: Args) -> Result<(), anyhow::Error> {
+async fn process_and_sink_data(
+    symlist: Vec<Vec<SymbolizedResult>>,
+    args: Args,
+) -> Result<(), anyhow::Error> {
     info!("stack is");
     let mut stack_node_map: HashMap<u64, StackNode> = HashMap::new();
     let mut stack_node_data_map: HashMap<u64, StackNodeData> = HashMap::new();
     let mut profiled_binary_map: HashMap<u64, ProfiledBinary> = HashMap::new();
     let mut basename: Option<String> = None;
-    if(args.binary.clone().unwrap().clone().contains("/")){
-        basename = Some(args.clone().binary.clone().unwrap().clone().split("/").last().unwrap().to_string());
+    if (args.binary.clone().unwrap().clone().contains("/")) {
+        basename = Some(
+            args.clone()
+                .binary
+                .clone()
+                .unwrap()
+                .clone()
+                .split("/")
+                .last()
+                .unwrap()
+                .to_string(),
+        );
     } else {
         basename = Some(args.clone().binary.unwrap().to_string());
     }
 
-    let profiled_binary = ProfiledBinary{
+    let profiled_binary = ProfiledBinary {
         id: misc_id(args.binary.unwrap()),
         event: args.event_type.to_string(),
         build_id: None,
@@ -329,21 +362,32 @@ async fn process_and_sink_data(symlist: Vec<Vec<SymbolizedResult>>, args: Args) 
     let mut parent_id: Option<u64> = None;
     for mut stack in symlist {
         // copy paste friendly
-        profiled_binary_map.entry(profiled_binary.id.clone())
-            .and_modify(|e| { (*e).sample_count += 1 })
-            .and_modify(|e| { (*e).raw_data_size += (stack.deep_size_of() as u64) })
+        profiled_binary_map
+            .entry(profiled_binary.id.clone())
+            .and_modify(|e| (*e).sample_count += 1)
+            .and_modify(|e| (*e).raw_data_size += (stack.deep_size_of() as u64))
             .or_insert(profiled_binary.clone());
         stack.reverse();
         for (i, &ref frame) in stack.iter().enumerate() {
             let mut data = StackNodeData {
                 id: 0,
                 symbol: cached_demangle(&frame.symbol).to_string(),
-                file: if frame.path.trim().is_empty() { None } else { Some(frame.path.trim().into()) },
-                line_number: if frame.line_no > 0 { Some(frame.line_no as u32) } else { None },
+                file: if frame.path.trim().is_empty() {
+                    None
+                } else {
+                    Some(frame.path.trim().into())
+                },
+                line_number: if frame.line_no > 0 {
+                    Some(frame.line_no as u32)
+                } else {
+                    None
+                },
             };
             id_data(&mut data);
-            stack_node_data_map.entry(data.id.clone()).or_insert(data.clone());
-            let mut stack_node = StackNode{
+            stack_node_data_map
+                .entry(data.id.clone())
+                .or_insert(data.clone());
+            let mut stack_node = StackNode {
                 id: 0,
                 parent_id: parent_id,
                 stack_node_data_id: data.id,
@@ -351,32 +395,31 @@ async fn process_and_sink_data(symlist: Vec<Vec<SymbolizedResult>>, args: Args) 
                 sample_count: 1,
             };
             id_stack_node(&mut stack_node);
-            stack_node_map.entry(stack_node.id.clone()).and_modify(|e| {e.sample_count+=1}).or_insert(stack_node.clone());
+            stack_node_map
+                .entry(stack_node.id.clone())
+                .and_modify(|e| e.sample_count += 1)
+                .or_insert(stack_node.clone());
             parent_id = Some(stack_node.id);
         }
         parent_id = None;
     }
 
-    let mut data_out = StoData{
+    let mut data_out = StoData {
         stack_nodes: stack_node_map.values().map(|x| (*x).clone()).collect(),
         stack_node_datas: stack_node_data_map.values().map(|x| (*x).clone()).collect(),
         profiled_binaries: profiled_binary_map.values().map(|x| (*x).clone()).collect(),
     };
 
-    profiled_binary_map.entry(profiled_binary.id.clone())
-        .and_modify(|e| { (*e).processed_data_size += (data_out.deep_size_of() as u64) });
+    profiled_binary_map
+        .entry(profiled_binary.id.clone())
+        .and_modify(|e| (*e).processed_data_size += (data_out.deep_size_of() as u64));
 
     let client = reqwest::Client::new();
-    match client.post(args.url)
-        .json(&data_out)
-        .send()
-        .await {
-        Ok(x) => {
-            match x.error_for_status() {
-                Ok(x) => {},
-                Err(x) =>{
-                    error!("failed to post data: {}", x);
-                }
+    match client.post(args.url).json(&data_out).send().await {
+        Ok(x) => match x.error_for_status() {
+            Ok(x) => {}
+            Err(x) => {
+                error!("failed to post data: {}", x);
             }
         },
         Err(x) => {
@@ -390,7 +433,7 @@ async fn process_and_sink_data(symlist: Vec<Vec<SymbolizedResult>>, args: Args) 
 async fn main() -> Result<(), anyhow::Error> {
     pretty_env_logger::init();
     let mut args = Args::parse();
-    if args.pid == 0 && args.binary.is_none(){
+    if args.pid == 0 && args.binary.is_none() {
         error!("either pid and binary or binary must be specified.");
         std::process::exit(-1);
     }
@@ -426,7 +469,6 @@ async fn main() -> Result<(), anyhow::Error> {
             task = tokio::spawn(process(args.clone(), rt.clone(), false));
         }
     }
-
 
     if child.is_some().clone() {
         // race condition.
