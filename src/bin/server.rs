@@ -12,7 +12,7 @@ use rocket::http::{ContentType, Header};
 use rocket::response::Redirect;
 use rocket::serde::json::Json;
 use rocket::serde::msgpack::MsgPack;
-use rocket::{Build, Response, Rocket, State};
+use rocket::{Build, Config, Response, Rocket, State};
 use rocket_include_tera::{
     tera_resources_initialize, tera_response, tera_response_cache, EtagIfNoneMatch,
     TeraContextManager, TeraResponse,
@@ -21,20 +21,20 @@ use rust_embed::RustEmbed;
 use serde_derive::{Deserialize, Serialize};
 use sqlx::migrate::Migrator;
 use sqlx::postgres::PgPoolOptions;
-use std::env;
+use std::{env, thread};
 use std::ffi::OsStr;
 use std::hash::Hash;
 use std::path::PathBuf;
 use futures::StreamExt;
+use rocket::data::{ByteUnit, Limits, ToByteUnit};
 
 #[macro_use]
 extern crate rocket;
 use serde_json::json;
 use sqlx::{query, Connection, Pool, Postgres, QueryBuilder};
+use tracing::Level;
+use tracing_subscriber::fmt::writer::MakeWriterExt;
 use sto::defs::{ProfiledBinary, StackNode, StackNodeData, StoData};
-
-#[macro_use]
-extern crate log;
 
 #[derive(RustEmbed)]
 #[folder = "d3-flame-graph/dist/"]
@@ -192,8 +192,9 @@ async fn data(id: i64) -> Json<D3FlamegraphData> {
 
     // the dag should rly be made by some cool function in the db (or well i haven't tried that and want to see how it work).
     // for now this simpler.
-    let mut conn = DB_POOL.get().expect("err getting db").acquire().await.expect("err getting db");
 
+    // Size of one stack frame for `factorial()` was measured experimentally
+    let mut conn = DB_POOL.get().expect("err getting db").acquire().await.expect("err getting db");
     let sn = sqlx::query_as!(StackNode, "select * from stack_node where profiled_binary_id=$1", id)
         .fetch_all(&mut conn)
         .await.expect("query err");
@@ -204,40 +205,46 @@ async fn data(id: i64) -> Json<D3FlamegraphData> {
     let pb = sqlx::query_as!(ProfiledBinary, "select * from profiled_binary where id=$1", id)
         .fetch_one(&mut conn)
         .await.expect("query err");
-    let sd_map: HashMap<i64, StackNodeData> = HashMap::from_iter(snd);
-    let sn_id_map: HashMap<i64, StackNode> = sn.iter().map(|x| (x.id.clone(), x.clone())).collect();
-    let mut sn_p_id_map: HashMap<i64, Vec<StackNode>> = HashMap::new();
-    // not great but can easily par map w/ rayon if need be.
-    let _exec: Vec<()> = sn_id_map.iter().filter(|(k,v)| v.parent_id.is_some()).map(|(k,v)| {
-        sn_p_id_map.entry(v.parent_id.unwrap()).and_modify(|e| (*e).push(v.clone())).or_insert(vec![v.clone()]);
-    }).collect();
 
-    // sorta a hack to make vis work w/o having to change.
-    fn build_dag(cur_id: i64, sn_id_map: &HashMap<i64, StackNode>, sd_map: &HashMap<i64, StackNodeData>, sn_p_id_map: &HashMap<i64, Vec<StackNode>>) -> D3FlamegraphData {
-        let cur_sn = sn_id_map.get(&cur_id).unwrap();
-        let cur_sd = sd_map.get(&(cur_sn.stack_node_data_id.clone())).unwrap();
-        D3FlamegraphData {
-            name: cur_sd.symbol.clone(),
-            value: cur_sn.sample_count.clone(),
-            filename: cur_sd.file.clone(),
-            line_number: cur_sd.line_number.clone(),
-            children: match sn_p_id_map.get(&cur_id) {
-                Some(id_list) => {
-                    Some(id_list.iter().map(|x| build_dag(x.id, sn_id_map, sd_map, sn_p_id_map)).collect())
+    let num: u64 = 100_000_000;
+
+    let data = thread::Builder::new().stack_size(num as usize * 0xFF).spawn(move || {
+        let sd_map: HashMap<i64, StackNodeData> = HashMap::from_iter(snd);
+        let sn_id_map: HashMap<i64, StackNode> = sn.iter().map(|x| (x.id.clone(), x.clone())).collect();
+        let mut sn_p_id_map: HashMap<i64, Vec<StackNode>> = HashMap::new();
+        // not great but can easily par map w/ rayon if need be.
+        let _exec: Vec<()> = sn_id_map.iter().filter(|(k,v)| v.parent_id.is_some()).map(|(k,v)| {
+            sn_p_id_map.entry(v.parent_id.unwrap()).and_modify(|e| (*e).push(v.clone())).or_insert(vec![v.clone()]);
+        }).collect();
+
+        // sorta a hack to make vis work w/o having to change.
+        fn build_dag(cur_id: i64, sn_id_map: &HashMap<i64, StackNode>, sd_map: &HashMap<i64, StackNodeData>, sn_p_id_map: &HashMap<i64, Vec<StackNode>>) -> D3FlamegraphData {
+            let cur_sn = sn_id_map.get(&cur_id).unwrap();
+            let cur_sd = sd_map.get(&(cur_sn.stack_node_data_id.clone())).unwrap();
+            D3FlamegraphData {
+                name: cur_sd.symbol.clone(),
+                value: cur_sn.sample_count.clone(),
+                filename: cur_sd.file.clone(),
+                line_number: cur_sd.line_number.clone(),
+                children: match sn_p_id_map.get(&cur_id) {
+                    Some(id_list) => {
+                        Some(id_list.iter().map(|x| build_dag(x.id, sn_id_map, sd_map, sn_p_id_map)).collect())
+                    },
+                    None => { None }
                 },
-                None => { None }
-            },
-        }
-    };
-    // from all root nodes, recursively build out a dag.c
-    let children: Vec<D3FlamegraphData> = sn.iter().filter(|x| x.parent_id.is_none()).map(|x| build_dag(x.id, &sn_id_map, &sd_map, &sn_p_id_map) ).collect();
-    Json(D3FlamegraphData{
-        name: pb.basename,
-        value: children.iter().map(|x| x.value ).sum(),
-        filename: None,
-        line_number: None,
-        children: Some(children),
-    })
+            }
+        };
+        // from all root nodes, recursively build out a dag.c
+        let children: Vec<D3FlamegraphData> = sn.iter().filter(|x| x.parent_id.is_none()).map(|x| build_dag(x.id, &sn_id_map, &sd_map, &sn_p_id_map) ).collect();
+        Json(D3FlamegraphData{
+            name: pb.basename,
+            value: children.iter().map(|x| x.value ).sum(),
+            filename: None,
+            line_number: None,
+            children: Some(children),
+        })
+    }).unwrap().join().unwrap();
+    data
 }
 
 #[get("/list")]
@@ -296,8 +303,18 @@ async fn index(
 
 #[rocket::main]
 async fn main() -> Result<(), anyhow::Error> {
-    dotenv().ok();
-    pretty_env_logger::init();
+    dotenvy::dotenv()?;
+    use tracing_subscriber::prelude::*;
+
+    let console_layer = console_subscriber::spawn();
+    tracing_subscriber::registry()
+        .with(console_layer)
+        .with(tracing_subscriber::fmt::layer()
+          .with_level(true)
+          .with_line_number(true)
+          .with_thread_names(true)
+          .with_filter(tracing_subscriber::filter::LevelFilter::from_level(Level::DEBUG)))
+      .init();
 
     let db = env::var("DATABASE_URL").expect("error, DATABASE_URL envvar must be set.");
 
@@ -312,7 +329,13 @@ async fn main() -> Result<(), anyhow::Error> {
         .run(DB_POOL.get().expect("err getting db pool"))
         .await?;
 
-    let _rocket = rocket::build()
+    let figment = rocket::Config::figment()
+        .merge(("port", 8000))
+        .merge(("address", "0.0.0.0"))
+        .merge(("limits", Limits::new().limit("json", 1000.mebibytes())));
+
+
+    let _rocket = rocket::custom(figment)
         .attach(TeraResponse::fairing(|tera| {
             tera_resources_initialize!(
                 tera,

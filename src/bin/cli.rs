@@ -1,5 +1,4 @@
 use anyhow::{bail, Result};
-use async_ctrlc::CtrlC;
 use atomic_counter::AtomicCounter;
 use blazesym::{BlazeSymbolizer, SymbolSrcCfg, SymbolizedResult, SymbolizerFeature};
 
@@ -17,10 +16,11 @@ use std::default::Default;
 use std::future::Future;
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::{sync_channel, SyncSender};
+use std::sync::mpsc::{channel, Sender, sync_channel, SyncSender};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::{process, thread};
+use std::{process, thread, time};
+use dotenvy::dotenv;
 use sto::bpftune::bpftune_bss_types::stacktrace_event;
 use sto::defs::{
     Args, EventType, ProcessQueue, ProfiledBinary, ReadQueue, StackInfo, StackNode, StackNodeData,
@@ -29,8 +29,7 @@ use sto::defs::{
 extern crate clap;
 extern crate num_cpus;
 use libbpf_rs::libbpf_sys::pid_t;
-
-use log::{error, info};
+use tracing::{event, span, Level};
 use moka::sync::Cache;
 use once_cell::sync::Lazy;
 use perf::perf_event_open;
@@ -41,7 +40,7 @@ use rocket::form::validate::Len;
 
 use sto::bpftune::*;
 use symbolic_demangle::{Demangle, DemangleOptions};
-use tokio::runtime::Handle;
+use tracing_subscriber::Layer;
 
 static SYM_CACHE: Lazy<Cache<String, String, ahash::RandomState>> = Lazy::new(|| {
     Cache::builder()
@@ -75,18 +74,13 @@ static MISC_ID_CACHE: Lazy<Cache<String, i64, ahash::RandomState>> = Lazy::new(|
         .build_with_hasher(ahash::RandomState::default())
 });
 
-static RQ: Lazy<Arc<Queue<StackInfo>>> = Lazy::new(|| Arc::new(ReadQueue::new(READ_TASK_COUNT)));
-static PQ: Lazy<Arc<Queue<Vec<Vec<SymbolizedResult>>>>> =
-    Lazy::new(|| Arc::new(ProcessQueue::new(PROCESS_TASK_COUNT)));
-
-static LAST_UPDATED: Lazy<Arc<AtomicUsize>> = Lazy::new(|| Arc::new(AtomicUsize::new(0)));
 
 fn bump_memlock_rlimit() -> Result<()> {
     let (ml_soft, ml_hard) = Resource::get(rlimit::Resource::MEMLOCK)?;
     if min(ml_soft, ml_hard) < 128 << 20 {
         match Resource::set(Resource::MEMLOCK, 128 << 20, 128 << 20) {
             Ok(_x) => {
-                info!("raised ulimit.");
+                event!(Level::INFO,"raised ulimit.");
             }
             Err(_x) => {
                 bail!(
@@ -103,8 +97,8 @@ fn bump_memlock_rlimit() -> Result<()> {
     Ok(())
 }
 
-fn profile(args: Args, tx: SyncSender<StackInfo>, _rt: tokio::runtime::Handle) -> Result<()> {
-    info!("IN PROFILE");
+fn profile(args: Args, tx: Sender<StackInfo>) -> Result<()> {
+    event!(Level::DEBUG,"IN PROFILE");
     let skel_builder = BpftuneSkelBuilder::default();
     bump_memlock_rlimit()?;
     let skel_ = skel_builder.open()?;
@@ -124,16 +118,13 @@ fn profile(args: Args, tx: SyncSender<StackInfo>, _rt: tokio::runtime::Handle) -
             tx.send(StackInfo {
                 event,
                 args: guess_it_is.clone(),
-            })
-            .unwrap()
+            }).unwrap()
         });
         0
-    })?;
-
-    thread::spawn(move || loop {});
+    }).expect("error on callback on map");
 
     let rb = rbb.build()?;
-    info!("CREATED RING BUFFER");
+    event!(Level::DEBUG,"CREATED RING BUFFER");
 
     let mut perf_fds = HashMap::new();
 
@@ -164,30 +155,18 @@ fn profile(args: Args, tx: SyncSender<StackInfo>, _rt: tokio::runtime::Handle) -
                 perf::bindings::PERF_FLAG_FD_CLOEXEC as u64,
             )
         };
+        event!(Level::DEBUG,"attaching to perf event");
         let link = skel.progs_mut().profile().attach_perf_event(result)?;
+        event!(Level::DEBUG,"attached to perf event");
         perf_fds.insert(result, link);
     }
 
-    let mut i = 0;
     loop {
         rb.poll(Duration::from_millis(1))?;
-        i += 1;
-        if i >= 3000 {
-            i = 0;
-            let last_update = LAST_UPDATED.load(Ordering::SeqCst) as u64;
-            if SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
-                - last_update
-                > 5
-                && last_update != 0
-            {
-                break;
-            };
-        }
+        thread::sleep(Duration::from_secs(5));
     }
-    info!("DONE ONE RUN");
+
+    event!(Level::DEBUG,"DONE ONE RUN");
     perf_fds.capacity();
     Ok(())
 }
@@ -261,7 +240,7 @@ fn id_data(data: &mut StackNodeData) {
 }
 
 fn symbolize(stack_info: StackInfo) -> Vec<Vec<SymbolizedResult>> {
-    info!("IN SYMBOLIZE");
+    event!(Level::DEBUG,"IN SYMBOLIZE");
     let sym_srcs = [SymbolSrcCfg::Process {
         pid: Some(stack_info.args.pid),
     }];
@@ -270,212 +249,166 @@ fn symbolize(stack_info: StackInfo) -> Vec<Vec<SymbolizedResult>> {
     symlist
 }
 
-async fn process(args: Args, rt: tokio::runtime::Handle, _init: bool) -> Result<(), anyhow::Error> {
-    info!("IN PROCESS");
-    let (tx, rx) = sync_channel(5000);
-
-    // let start_rc_ref = start_rc.clone();
-    let rti = rt.clone();
+fn process(args: Args) -> Result<(), anyhow::Error> {
+    event!(Level::DEBUG,"IN PROCESS");
+    let (tx, rx) = channel();
+    let i_args = args.clone();
+    let b_args = args.clone();
     thread::spawn(move || {
+        let ii_args = i_args.clone();
+        let mut buf = Vec::new();
         loop {
+            let iii_args = ii_args.clone();
             match rx.recv() {
                 Ok(data_chunk) => {
-                    LAST_UPDATED.store(
-                        SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs() as usize,
-                        Ordering::SeqCst,
-                    );
-                    let pq_ref = PQ.clone();
-                    info!("READ DATA");
-                    rti.clone()
-                        .spawn(async move { pq_ref.push(symbolize(data_chunk)).await });
+                    event!(Level::INFO,"READ DATA, BUF LEN:{}", buf.len().clone());
+                    if(buf.len() < 1000){
+                        buf.push(symbolize(data_chunk).to_owned());
+                    } else {
+                        let old_buf = buf.to_owned();
+                        thread::spawn(move || {
+                            let iiii_args = iii_args.clone();
+                            process_and_sink_data(old_buf.clone(), iiii_args.clone());
+                            event!(Level::INFO,"SANK DATA");
+                        });
+                        buf.clear();
+                    }
                 }
                 Err(_) => {
-                    // cleanup between runs (needs new rx).
-                    break;
                 }
             }
         }
     });
 
-    // doesn't make sense to clean up between runs.
-    for _a in 1..WORKER_COUNT {
-        let pq_ref = PQ.clone();
-        let i_arg = args.clone();
-        tokio::spawn(async move {
-            loop {
-                let ii_args = i_arg.clone();
-                process_and_sink_data(pq_ref.pop().await, ii_args.clone())
-                    .await
-                    .expect("err");
-                info!("SANK DATA");
-            }
-        });
-    }
-    info!("SPAWNED WORKERS");
 
-    // trigger profile loop, wait for finish.
-    profile(args, tx, rt)?;
+    profile(b_args.clone(), tx).expect("TODO: panic message");
 
     // done.
     Ok(())
 }
 
-async fn process_and_sink_data(
-    mut symlist: Vec<Vec<SymbolizedResult>>,
+fn process_and_sink_data(
+    mut symlists: Vec<Vec<Vec<SymbolizedResult>>>,
     args: Args,
 ) -> Result<(), anyhow::Error> {
-    info!("stack is");
-    let mut stack_node_map: HashMap<i64, StackNode> = HashMap::new();
-    let mut stack_node_data_map: HashMap<i64, StackNodeData> = HashMap::new();
-    let mut profiled_binary_map: HashMap<i64, ProfiledBinary> = HashMap::new();
-    let mut basename: Option<String> = None;
-    if args.binary.clone().unwrap().contains('/') {
-        basename = Some(
-            args.clone()
-                .binary
-                .unwrap()
-                .split('/')
-                .last()
-                .unwrap()
-                .to_string(),
-        );
-    } else {
-        basename = Some(args.clone().binary.unwrap());
-    }
+        event!(Level::DEBUG,"stack is");
+        let mut stack_node_map: HashMap<i64, StackNode> = HashMap::new();
+        let mut stack_node_data_map: HashMap<i64, StackNodeData> = HashMap::new();
+        let mut profiled_binary_map: HashMap<i64, ProfiledBinary> = HashMap::new();
+        let basename = args.clone().binary.clone();
 
-    let profiled_binary = ProfiledBinary {
-        id: misc_id(args.binary.unwrap()),
-        event: args.event_type.to_string(),
-        build_id: None,
-        basename: basename.unwrap(),
-        updated_at: None,
-        created_at: None,
-        sample_count: 0,
-        raw_data_size: 0,
-        processed_data_size: 0,
-    };
+        let profiled_binary = ProfiledBinary {
+            id: misc_id(args.clone().binary.unwrap().clone()),
+            event: args.event_type.to_string(),
+            build_id: None,
+            basename: basename.unwrap(),
+            updated_at: None,
+            created_at: None,
+            sample_count: 0,
+            raw_data_size: 0,
+            processed_data_size: 0,
+        };
 
-    let _cur_bin_id = profiled_binary.id;
-    let mut parent_id: Option<i64> = None;
-    symlist.reverse();
-    for mut stack in symlist {
-        profiled_binary_map
-            .entry(profiled_binary.id)
-            .or_insert(profiled_binary.clone());
-        profiled_binary_map
-            .entry(profiled_binary.id)
-            .and_modify(|e| e.sample_count += 1)
-            .and_modify(|e| e.raw_data_size += stack.deep_size_of() as i64);
-        // stack.reverse();
-        for (_i, frame) in stack.iter().enumerate() {
-            let mut data = StackNodeData {
-                id: 0,
-                symbol: cached_demangle(&frame.symbol).to_string(),
-                file: if frame.path.trim().is_empty() {
-                    None
-                } else {
-                    Some(frame.path.trim().into())
-                },
-                line_number: if frame.line_no > 0 {
-                    Some(frame.line_no as i32)
-                } else {
-                    None
-                },
-            };
-            id_data(&mut data);
-            stack_node_data_map.entry(data.id).or_insert(data.clone());
-            let mut stack_node = StackNode {
-                id: 0,
-                parent_id,
-                stack_node_data_id: data.id,
-                profiled_binary_id: profiled_binary.id,
-                sample_count: 1,
-            };
-            id_stack_node(&mut stack_node);
-            stack_node_map
-                .entry(stack_node.id)
+        let _cur_bin_id = profiled_binary.id;
+        let mut parent_id: Option<i64> = None;
+    for mut symlist in symlists {
+        symlist.reverse();
+        for mut stack in symlist {
+            profiled_binary_map
+                .entry(profiled_binary.id)
+                .or_insert(profiled_binary.clone());
+            profiled_binary_map
+                .entry(profiled_binary.id)
                 .and_modify(|e| e.sample_count += 1)
-                .or_insert(stack_node.clone());
-            parent_id = Some(stack_node.id);
-        }
-    }
-
-    let mut data_out = StoData {
-        stack_nodes: stack_node_map.values().map(|x| (*x).clone()).collect(),
-        stack_node_datas: stack_node_data_map.values().map(|x| (*x).clone()).collect(),
-        profiled_binaries: profiled_binary_map.values().map(|x| (*x).clone()).collect(),
-    };
-
-    profiled_binary_map
-        .entry(profiled_binary.id)
-        .and_modify(|e| e.processed_data_size += data_out.deep_size_of() as i64);
-
-    data_out.profiled_binaries = profiled_binary_map.values().map(|x| (*x).clone()).collect();
-
-    let client = reqwest::Client::new();
-    match client.post(args.url).json(&data_out).send().await {
-        Ok(x) => match x.error_for_status() {
-            Ok(_x) => {}
-            Err(x) => {
-                error!("failed to post data: {}", x);
+                .and_modify(|e| e.raw_data_size += stack.deep_size_of() as i64);
+            // stack.reverse();
+            for (_i, frame) in stack.iter().enumerate() {
+                let mut data = StackNodeData {
+                    id: 0,
+                    symbol: cached_demangle(&frame.symbol).to_string(),
+                    file: if frame.path.trim().is_empty() {
+                        None
+                    } else {
+                        Some(frame.path.trim().into())
+                    },
+                    line_number: if frame.line_no > 0 {
+                        Some(frame.line_no as i32)
+                    } else {
+                        None
+                    },
+                };
+                id_data(&mut data);
+                stack_node_data_map.entry(data.id).or_insert(data.clone());
+                let mut stack_node = StackNode {
+                    id: 0,
+                    parent_id,
+                    stack_node_data_id: data.id,
+                    profiled_binary_id: profiled_binary.id,
+                    sample_count: 1,
+                };
+                id_stack_node(&mut stack_node);
+                stack_node_map
+                    .entry(stack_node.id)
+                    .and_modify(|e| e.sample_count += 1)
+                    .or_insert(stack_node.clone());
+                parent_id = Some(stack_node.id);
             }
-        },
-        Err(x) => {
-            error!("failed to post data: {}", x);
         }
     }
+
+        let mut data_out = StoData {
+            stack_nodes: stack_node_map.values().map(|x| (*x).clone()).collect(),
+            stack_node_datas: stack_node_data_map.values().map(|x| (*x).clone()).collect(),
+            profiled_binaries: profiled_binary_map.values().map(|x| (*x).clone()).collect(),
+        };
+
+        profiled_binary_map
+            .entry(profiled_binary.id)
+            .and_modify(|e| e.processed_data_size += data_out.deep_size_of() as i64);
+
+        data_out.profiled_binaries = profiled_binary_map.values().map(|x| (*x).clone()).collect();
+
+        let client = reqwest::blocking::Client::new();
+        match client.post(args.url.clone()).json(&data_out).send() {
+            Ok(x) => match x.error_for_status() {
+                Ok(_x) => {}
+                Err(x) => {
+                    event!(Level::ERROR,"failed to post data: {}", x);
+                }
+            },
+            Err(x) => {
+                event!(Level::ERROR,"failed to post data: {}", x);
+            }
+        }
+
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<(), anyhow::Error> {
-    pretty_env_logger::init();
+
+fn main() -> Result<(), anyhow::Error> {
+    dotenvy::dotenv()?;
+    use tracing_subscriber::prelude::*;
+    let console_layer = console_subscriber::spawn();
+    tracing_subscriber::registry()
+        .with(console_layer)
+        .with(tracing_subscriber::fmt::layer()
+            .with_level(true)
+            .with_line_number(true)
+            .with_thread_names(true)
+            .with_filter(tracing_subscriber::filter::LevelFilter::from_level(Level::DEBUG)))
+        .init();
+
     let mut args = Args::parse();
-    if args.pid == 0 && args.binary.is_none() {
-        error!("either pid and binary or binary must be specified.");
-        std::process::exit(-1);
+    if args.binary.is_none(){
+        args.binary = Some("provide_a_meaningful_name".to_string());
     }
-    let mut child: Option<Child> = None;
     if args.pid == 0 {
-        if let Some(binary) = args.binary.clone() {
-            let status = Command::new(&binary).spawn()?;
-            args.pid = status.id();
-            child = Some(status);
-        }
-    } else if args.binary.is_none() {
-        error!("binary is unset, exiting");
+        event!(Level::ERROR, "please provide a pid");
         std::process::exit(-1);
     }
 
-    let rt = Handle::current();
 
-    let ctrlc = CtrlC::new().expect("cannot create Ctrl+C handler?");
-
-    let ctrlc = tokio::spawn(ctrlc);
-
-    let mut task = tokio::spawn(process(args.clone(), rt.clone(), true));
-
-    loop {
-        while !task.is_finished() && !ctrlc.is_finished() {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-        if ctrlc.is_finished() {
-            break;
-        }
-        if task.is_finished() {
-            LAST_UPDATED.store(0_usize, Ordering::SeqCst);
-            task = tokio::spawn(process(args.clone(), rt.clone(), false));
-        }
-    }
-
-    if child.is_some() {
-        // race condition.
-        child.as_mut().unwrap().kill();
-        process::exit(-1);
-    }
+    process(args.clone());
 
     Ok(())
 }

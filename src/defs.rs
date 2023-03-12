@@ -52,7 +52,7 @@ pub struct Args {
     pub event_type: EventType,
     #[arg(short, long, default_value_t = 100000, help = "sample frequency.")]
     pub sample_freq: u64,
-    #[arg(short, long, help = "path to binary (or binary name if pid provided)")]
+    #[arg(short, long, help = "name of thing being profiled")]
     pub binary: Option<String>,
     #[arg(
         short,

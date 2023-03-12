@@ -9,10 +9,10 @@ folly::coro::CancellableAsyncScope backgroundScope;
 ConcurrentHashMapSIMD<string, string> bigMapOfStr;
 folly::coro::Mutex map_lock;
 
-DEFINE_uint64(threads, 10, "Threads to waste (effectively).");
-DEFINE_uint64(seconds, 15, "seconds to waste compute for");
+DEFINE_uint64(threads, 2, "Threads to waste (effectively).");
+DEFINE_uint64(seconds, 300, "seconds to waste compute for");
 DEFINE_double(mem_intensive_ratio, 0.5, "Do mem intensive stuff X % of time, 0-1.");
-DEFINE_uint64(dump_size, 1000, "What capacity to clear map at.");
+DEFINE_uint64(dump_size, 500, "What capacity to clear map at.");
 
 Task<void> map_write(std::string k, std::string v){
     co_await map_lock.co_scoped_lock();
