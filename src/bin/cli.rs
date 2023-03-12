@@ -52,9 +52,9 @@ static SYM_CACHE: Lazy<Cache<String, String, ahash::RandomState>> = Lazy::new(||
         .build_with_hasher(ahash::RandomState::default())
 });
 
-static DATA_ID_CACHE: Lazy<Cache<StackNodeData, u64, ahash::RandomState>> = Lazy::new(|| {
+static DATA_ID_CACHE: Lazy<Cache<StackNodeData, i64, ahash::RandomState>> = Lazy::new(|| {
     Cache::builder()
-        .weigher(|key: &StackNodeData, _value: &u64| -> u32 {
+        .weigher(|key: &StackNodeData, _value: &i64| -> u32 {
             key.symbol.len().try_into().unwrap_or(u32::MAX)
                 + key.file.len().try_into().unwrap_or(u32::MAX)
         })
@@ -62,15 +62,15 @@ static DATA_ID_CACHE: Lazy<Cache<StackNodeData, u64, ahash::RandomState>> = Lazy
         .build_with_hasher(ahash::RandomState::default())
 });
 
-static NODE_ID_CACHE: Lazy<Cache<StackNode, u64, ahash::RandomState>> = Lazy::new(|| {
+static NODE_ID_CACHE: Lazy<Cache<StackNode, i64, ahash::RandomState>> = Lazy::new(|| {
     Cache::builder()
         .max_capacity(8 * 1024 * 1024)
         .build_with_hasher(ahash::RandomState::default())
 });
 
-static MISC_ID_CACHE: Lazy<Cache<String, u64, ahash::RandomState>> = Lazy::new(|| {
+static MISC_ID_CACHE: Lazy<Cache<String, i64, ahash::RandomState>> = Lazy::new(|| {
     Cache::builder()
-        .weigher(|key: &String, _value: &u64| -> u32 { key.len().try_into().unwrap_or(u32::MAX) })
+        .weigher(|key: &String, _value: &i64| -> u32 { key.len().try_into().unwrap_or(u32::MAX) })
         .max_capacity(2 * 1024 * 1024)
         .build_with_hasher(ahash::RandomState::default())
 });
@@ -204,13 +204,14 @@ fn cached_demangle(mangled: &str) -> String {
     }
 }
 
-fn misc_id(data: String) -> u64 {
+fn misc_id(data: String) -> i64 {
     match MISC_ID_CACHE.get(&data) {
         Some(x) => x,
         None => {
             let mut hasher = HighwayHasher::new(HASHER_SEED);
             hasher.append(data.as_bytes());
-            let id: u64 = hasher.finalize64();
+            let id_neg: i64 = hasher.finalize64() as i64;
+            let id = id_neg.abs() as i64;
             MISC_ID_CACHE.insert(data.clone(), id);
             id
         }
@@ -227,7 +228,8 @@ fn id_stack_node(data: &mut StackNode) {
             }
             hasher.append(&data.stack_node_data_id.to_be_bytes());
             hasher.append(&data.profiled_binary_id.to_be_bytes());
-            let id: u64 = hasher.finalize64();
+            let id_neg: i64 = hasher.finalize64() as i64;
+            let id = id_neg.abs() as i64;
             // should probably restructure this a bit because of 0 id in cache.
             NODE_ID_CACHE.insert(data.clone(), id);
             id
@@ -248,7 +250,8 @@ fn id_data(data: &mut StackNodeData) {
             if let Some(line_number) = data.line_number {
                 hasher.append(&line_number.to_be_bytes());
             }
-            let id: u64 = hasher.finalize64();
+            let id_neg: i64 = hasher.finalize64() as i64;
+            let id = id_neg.abs() as i64;
             // should probably restructure this a bit because of 0 id in cache.
             DATA_ID_CACHE.insert(data.clone(), id);
             id
@@ -321,13 +324,13 @@ async fn process(args: Args, rt: tokio::runtime::Handle, _init: bool) -> Result<
 }
 
 async fn process_and_sink_data(
-    symlist: Vec<Vec<SymbolizedResult>>,
+    mut symlist: Vec<Vec<SymbolizedResult>>,
     args: Args,
 ) -> Result<(), anyhow::Error> {
     info!("stack is");
-    let mut stack_node_map: HashMap<u64, StackNode> = HashMap::new();
-    let mut stack_node_data_map: HashMap<u64, StackNodeData> = HashMap::new();
-    let mut profiled_binary_map: HashMap<u64, ProfiledBinary> = HashMap::new();
+    let mut stack_node_map: HashMap<i64, StackNode> = HashMap::new();
+    let mut stack_node_data_map: HashMap<i64, StackNodeData> = HashMap::new();
+    let mut profiled_binary_map: HashMap<i64, ProfiledBinary> = HashMap::new();
     let mut basename: Option<String> = None;
     if args.binary.clone().unwrap().contains('/') {
         basename = Some(
@@ -356,15 +359,17 @@ async fn process_and_sink_data(
     };
 
     let _cur_bin_id = profiled_binary.id;
-    let mut parent_id: Option<u64> = None;
+    let mut parent_id: Option<i64> = None;
+    symlist.reverse();
     for mut stack in symlist {
-        // copy paste friendly
+        profiled_binary_map
+            .entry(profiled_binary.id)
+            .or_insert(profiled_binary.clone());
         profiled_binary_map
             .entry(profiled_binary.id)
             .and_modify(|e| e.sample_count += 1)
-            .and_modify(|e| e.raw_data_size += stack.deep_size_of() as u64)
-            .or_insert(profiled_binary.clone());
-        stack.reverse();
+            .and_modify(|e| e.raw_data_size += stack.deep_size_of() as i64);
+        // stack.reverse();
         for (_i, frame) in stack.iter().enumerate() {
             let mut data = StackNodeData {
                 id: 0,
@@ -375,7 +380,7 @@ async fn process_and_sink_data(
                     Some(frame.path.trim().into())
                 },
                 line_number: if frame.line_no > 0 {
-                    Some(frame.line_no as u32)
+                    Some(frame.line_no as i32)
                 } else {
                     None
                 },
@@ -396,10 +401,9 @@ async fn process_and_sink_data(
                 .or_insert(stack_node.clone());
             parent_id = Some(stack_node.id);
         }
-        parent_id = None;
     }
 
-    let data_out = StoData {
+    let mut data_out = StoData {
         stack_nodes: stack_node_map.values().map(|x| (*x).clone()).collect(),
         stack_node_datas: stack_node_data_map.values().map(|x| (*x).clone()).collect(),
         profiled_binaries: profiled_binary_map.values().map(|x| (*x).clone()).collect(),
@@ -407,7 +411,9 @@ async fn process_and_sink_data(
 
     profiled_binary_map
         .entry(profiled_binary.id)
-        .and_modify(|e| e.processed_data_size += data_out.deep_size_of() as u64);
+        .and_modify(|e| e.processed_data_size += data_out.deep_size_of() as i64);
+
+    data_out.profiled_binaries = profiled_binary_map.values().map(|x| (*x).clone()).collect();
 
     let client = reqwest::Client::new();
     match client.post(args.url).json(&data_out).send().await {

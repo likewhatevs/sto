@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::bpftune::bpftune_bss_types::stacktrace_event;
 use blazesym::SymbolizedResult;
 use chrono::{DateTime, Utc};
@@ -24,9 +25,9 @@ pub type ReadQueue = deadqueue::limited::Queue<StackInfo>;
 pub type ProcessQueue = deadqueue::limited::Queue<Vec<Vec<SymbolizedResult>>>;
 
 pub const HASHER_SEED: Key = Key([1, 2, 3, 4]);
-pub static NODES: Lazy<Arc<DashMap<u64, StackNode>>> = Lazy::new(|| Arc::new(DashMap::new()));
-pub static DATAS: Lazy<Arc<DashMap<u64, StackNodeData>>> = Lazy::new(|| Arc::new(DashMap::new()));
-pub static BINARIES: Lazy<Arc<DashMap<u64, ProfiledBinary>>> =
+pub static NODES: Lazy<Arc<DashMap<i64, StackNode>>> = Lazy::new(|| Arc::new(DashMap::new()));
+pub static DATAS: Lazy<Arc<DashMap<i64, StackNodeData>>> = Lazy::new(|| Arc::new(DashMap::new()));
+pub static BINARIES: Lazy<Arc<DashMap<i64, ProfiledBinary>>> =
     Lazy::new(|| Arc::new(DashMap::new()));
 
 #[derive(ValueEnum, Debug, Serialize, Deserialize, Clone, Copy, enum_display_derive::Display)]
@@ -77,7 +78,7 @@ pub struct StackInfo {
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, Hash, Eq, PartialEq, DeepSizeOf)]
 pub struct ProfiledBinary {
-    pub id: u64,
+    pub id: i64,
     pub event: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub build_id: Option<String>,
@@ -86,27 +87,45 @@ pub struct ProfiledBinary {
     pub updated_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
-    pub sample_count: u64,
-    pub raw_data_size: u64,
-    pub processed_data_size: u64,
+    pub sample_count: i64,
+    pub raw_data_size: i64,
+    pub processed_data_size: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, Hash, Eq, PartialEq, DeepSizeOf)]
 pub struct StackNode {
-    pub id: u64,
+    pub id: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent_id: Option<u64>,
-    pub stack_node_data_id: u64,
-    pub profiled_binary_id: u64,
-    pub sample_count: u64,
+    pub parent_id: Option<i64>,
+    pub stack_node_data_id: i64,
+    pub profiled_binary_id: i64,
+    pub sample_count: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, Hash, Eq, PartialEq, DeepSizeOf)]
 pub struct StackNodeData {
-    pub id: u64,
+    pub id: i64,
     pub symbol: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub line_number: Option<u32>,
+    pub line_number: Option<i32>,
+}
+
+impl FromIterator<StackNodeData> for HashMap<i64, StackNodeData> {
+    fn from_iter<I>(xs: I) -> Self
+        where
+            I: IntoIterator<Item = StackNodeData>,
+    {
+        xs.into_iter().map(|x| (x.id.clone(), x)).collect()
+    }
+}
+
+impl FromIterator<ProfiledBinary> for HashMap<i64, ProfiledBinary> {
+    fn from_iter<I>(xs: I) -> Self
+        where
+            I: IntoIterator<Item = ProfiledBinary>,
+    {
+        xs.into_iter().map(|x| (x.id.clone(), x)).collect()
+    }
 }

@@ -1,3 +1,153 @@
 {
-  "db": "PostgreSQL"
+  "db": "PostgreSQL",
+  "07cdf9919b36c9f656a30480888dd9e8f2b17a6b1d6e70989d8a738bb3292483": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int8"
+        },
+        {
+          "name": "parent_id",
+          "ordinal": 1,
+          "type_info": "Int8"
+        },
+        {
+          "name": "stack_node_data_id",
+          "ordinal": 2,
+          "type_info": "Int8"
+        },
+        {
+          "name": "profiled_binary_id",
+          "ordinal": 3,
+          "type_info": "Int8"
+        },
+        {
+          "name": "sample_count",
+          "ordinal": 4,
+          "type_info": "Int8"
+        }
+      ],
+      "nullable": [
+        false,
+        true,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int8"
+        ]
+      }
+    },
+    "query": "select * from stack_node where profiled_binary_id=$1"
+  },
+  "33f9cfb3dc2d9947ac5c1e96e129ed147ffb6e7c3d340309ce4e450dbf365479": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int8"
+        },
+        {
+          "name": "event",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "build_id",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "basename",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 4,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 5,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "sample_count",
+          "ordinal": 6,
+          "type_info": "Int8"
+        },
+        {
+          "name": "raw_data_size",
+          "ordinal": 7,
+          "type_info": "Int8"
+        },
+        {
+          "name": "processed_data_size",
+          "ordinal": 8,
+          "type_info": "Int8"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        true,
+        false,
+        true,
+        true,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int8"
+        ]
+      }
+    },
+    "query": "select * from profiled_binary where id=$1"
+  },
+  "949487f50c584c923f9ddb69daf6bc6adc45db62dfc50a465254f691ad5c357b": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int8"
+        },
+        {
+          "name": "symbol",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "file",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "line_number",
+          "ordinal": 3,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        true,
+        true
+      ],
+      "parameters": {
+        "Left": [
+          "Int8"
+        ]
+      }
+    },
+    "query": "select d.id as id, d.symbol as symbol, d.file as file, d.line_number as line_number from stack_node_data d inner join stack_node n ON n.stack_node_data_id = d.id where n.profiled_binary_id = $1 "
+  }
 }

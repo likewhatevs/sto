@@ -30,7 +30,6 @@ https://cdn.jsdelivr.net/npm/jsgrid@1.5.3/dist/jsgrid-theme.min.css
                             <option selected value="{{ binary.id }}">
                                 <div class="row g-2 align-items-center">
                                     <div class="col">{{ binary.name }}</div>
-                                    <div class="col">{{ binary.version }}</div>
                                     <div class="col">{{ binary.date }}</div>
                         {% endfor %}
                     </select>
@@ -151,7 +150,7 @@ https://cdn.jsdelivr.net/npm/jsgrid@1.5.3/dist/jsgrid.min.js
 
         // Example of how to set fixed chart height
         // flameGraph.height(540);
-        axios.get("/dag/1").then(function (response) {
+        axios.get("/dag/123").then(function (response) {
             d3.select("#chart").datum(response.data).call(flameGraph);
         });
 

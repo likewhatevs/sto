@@ -13,8 +13,10 @@ create table profiled_binary
     event         text not null,
     build_id      text,
     basename      text not null,
-    updated_at    timestamptz not null DEFAULT now(),
-    created_at    timestamptz not null DEFAULT now(),
+    -- just makes orm-lite thing easier to use
+    updated_at    timestamptz DEFAULT now(),
+    --- same
+    created_at    timestamptz DEFAULT now(),
     sample_count  bigint      not null,
     raw_data_size bigint      not null,
     processed_data_size bigint not null
@@ -38,4 +40,18 @@ ALTER TABLE stack_node_data
         GENERATED ALWAYS AS (to_tsvector('english', coalesce(symbol, '') || ' ' || coalesce(file, '') || ' ' ||
                                                     coalesce(line_number::text, ''))) STORED;
 
+CREATE OR REPLACE FUNCTION subtree(rootid bigint)
+    RETURNS jsonb
+    LANGUAGE sql STABLE PARALLEL SAFE AS
+$func$
+SELECT jsonb_agg(sub)
+FROM  (
+          SELECT snd.file as filename, snd.line_number as line_number, snd.symbol as name, n.sample_count as value, subtree(c.id) AS children
+          FROM stack_node c
+                   JOIN stack_node n ON n.id = c.parent_id
+                   join stack_node_data snd on n.stack_node_data_id = snd.id
+          where n.id = rootid and c.parent_id = rootid
+          order by n.id
+      ) sub
+$func$;
 
