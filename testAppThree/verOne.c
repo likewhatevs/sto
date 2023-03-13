@@ -2,7 +2,7 @@
 #include <unistd.h>
 
 void awesomeDependency(){
-    int i = 1000000000;
+    int i = 100000*100;
     while (i > 0) {
         int a = 2;
         int b = a * 2;
@@ -12,10 +12,16 @@ void awesomeDependency(){
 
 void doMathStuff(){
     awesomeDependency();
+    awesomeDependency();
 }
 
 void doBusinessLogic(){
-    sleep(1);
+    int i = 100000*10000;
+    while (i > 0) {
+        int a = 2;
+        int b = a * 2;
+        i = i - 1 ;
+    }
 }
 
 int main()
@@ -24,5 +30,6 @@ int main()
     while(1){
         doMathStuff();
         doBusinessLogic();
+        awesomeDependency();
     }
 }
