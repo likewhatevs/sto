@@ -49,7 +49,7 @@ https://cdn.jsdelivr.net/npm/jsgrid@1.5.3/dist/jsgrid-theme.min.css
                 </div>
             </div>
         </nav>
-        <h3 class="text-muted">spit out template card here.</h3>
+        <div id="binaryinfo"></div>
     </div>
     <hr/>
     <div class="col gr-2">
@@ -88,45 +88,35 @@ https://cdn.jsdelivr.net/npm/jsgrid@1.5.3/dist/jsgrid.min.js
 "></script>
 <script type="text/javascript">
     $(document).ready(function () {
-        // Handler for .ready() called.
+        // https://github.com/Datamart/bytes-formatter/blob/master/index.js
+        // cuz life is too short for figuring out how to deal w/ module imports.
+        const FORMATS = ['bytes', 'KB', 'MB', 'GB', 'TB', 'PB'];
+        var formatBytes = (bytes) => {
+            let i = 0;
 
+            while (1023 < bytes) {
+                bytes /= 1024;
+                ++i;
+            }
+
+            return (i ? bytes.toFixed(2) : bytes) + ' ' + FORMATS[i];
+        };
+
+        // Handler for .ready() called.
         var flameGraph = flamegraph()
             .width($('#chart').width())
             .cellHeight(18)
             .transitionDuration(750)
-            .minFrameSize(5)
-            .transitionEase(d3.easeCubic)
+            .minFrameSize(1)
+            // .transitionEase(d3.easeCubic)
             .sort(true)
             //Example to sort in reverse order
             //.sort(function(a,b){ return d3.descending(a.name, b.name);})
-            .title("asdf")
+            .title("")
             .onClick(onClick)
+            .height(Math.round($(window).height()*.60))
             // .differential(false)
             .selfValue(false);
-        //  lifted from http://martinspier.io/d3-flame-graph/
-
-        // Example on how to use custom tooltips using d3-tip.
-
-        // var tip = d3.tip()
-        //   .direction("s")
-        //   .offset([8, 0])
-        //   .attr('class', 'd3-flame-graph-tip')
-        //   .html(function(d) { return "name: " + d.data.name + ", value: " + d.data.value; });
-        // var label = function(d) {
-        //  return "name: " + d.name + ", value: " + d.value;
-        // }
-        // flameGraph.label(label);
-
-
-        // var tip = d3.tip()
-        //   .direction("s")
-        //   .offset([8, 0])
-        //   .attr('class', 'd3-flame-graph-tip')
-        //   .html(function(d) { return "name: " + d.data.name + ", value: " + d.data.value; });
-        // flameGraph.toolTip(tip)
-
-        // var tip = flamegraph.tooltip.defaultFlamegraphTooltip()
-        //     .text(d => "name: " + d.data.name + ", value: " + d.data.value);
         var tip = d3.tip().attr('class', 'd3-tip').html((EVENT)=>{
             var resp = 'symbol: ' + EVENT.data.name;
                 if(EVENT.data.filename){
@@ -138,7 +128,6 @@ https://cdn.jsdelivr.net/npm/jsgrid@1.5.3/dist/jsgrid.min.js
                 return resp;
             });
         flameGraph.tooltip(tip)
-
         var details = document.getElementById("details");
         flameGraph.setDetailsElement(details);
 
@@ -149,10 +138,21 @@ https://cdn.jsdelivr.net/npm/jsgrid@1.5.3/dist/jsgrid.min.js
         // flameGraph.label(label);
 
         // Example of how to set fixed chart height
-        // flameGraph.height(540);
-        axios.get("/dag/123").then(function (response) {
-            d3.select("#chart").datum(response.data).call(flameGraph);
-        });
+
+        d3.json("/dag/123")
+            .then((data) => {
+                d3.select("#chart")
+                    .datum(data)
+                    .call(flameGraph);
+            })
+            .catch(error => {
+                return console.warn(error);
+            });
+
+
+        // axios.get("/dag/123").then(function (response) {
+        //     d3.select("#chart").datum(response.data).call(flameGraph);
+        // });
 
         document
             .getElementById("dataform")
@@ -162,10 +162,47 @@ https://cdn.jsdelivr.net/npm/jsgrid@1.5.3/dist/jsgrid.min.js
 
         $("#dataBtn").click(function (){
             var term = document.getElementById("dataSelector").value;
-            axios.get("/dag/"+term).then(function (response) {
-                flameGraph.clear();
-                d3.select("#chart").datum(response.data).call(flameGraph);
+
+            d3.json("/dag/"+term)
+                .then((data) => {
+                    d3.select("#chart")
+                        .datum(data)
+                        .call(flameGraph);
+                })
+                .catch(error => {
+                    return console.warn(error);
+                });
+            axios.get("/data/"+term).then(function (response) {
+                let data = `<table class="table">
+                    <thead>
+                    <tr>
+                        <th scope="col">id</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Verion</th>
+                        <th scope="col">Samples</th>
+                        <th scope="col">Raw Data Size</th>
+                        <th scope="col">Sto Data Size</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td>${response.data.id}</td>
+                        <td>${response.data.basename}</td>
+                        <td>${response.data.build_id}</td>
+                        <td>${response.data.sample_count}</td>
+                        <td>${formatBytes(response.data.raw_data_size)}</td>
+                        <td>${formatBytes(response.data.processed_data_size)}</td>
+                    </tr>
+                    </tbody>
+                </table>`;
+
+                document.getElementById('binaryinfo').innerHTML = data;
             });
+
+            // axios.get("/dag/"+term).then(function (response) {
+            //     flameGraph.clear();
+            //     d3.select("#chart").datum(response.data).call(flameGraph);
+            // });
         });
 
         document

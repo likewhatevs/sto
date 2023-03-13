@@ -261,8 +261,8 @@ fn process(args: Args) -> Result<(), anyhow::Error> {
             let iii_args = ii_args.clone();
             match rx.recv() {
                 Ok(data_chunk) => {
-                    event!(Level::INFO,"READ DATA, BUF LEN:{}", buf.len().clone());
-                    if(buf.len() < 1000){
+                    event!(Level::DEBUG,"READ DATA, BUF LEN:{}", buf.len().clone());
+                    if(buf.len() < 200){
                         buf.push(symbolize(data_chunk).to_owned());
                     } else {
                         let old_buf = buf.to_owned();
@@ -296,11 +296,20 @@ fn process_and_sink_data(
         let mut stack_node_data_map: HashMap<i64, StackNodeData> = HashMap::new();
         let mut profiled_binary_map: HashMap<i64, ProfiledBinary> = HashMap::new();
         let basename = args.clone().binary.clone();
+        let version = args.clone().version;
+        let id = match version {
+            Some(x) => {
+                misc_id(format!("{}{}", args.clone().binary.unwrap().clone(), x))
+            },
+            None => {
+                misc_id(args.clone().binary.unwrap().clone())
+            }
+        };
 
         let profiled_binary = ProfiledBinary {
-            id: misc_id(args.clone().binary.unwrap().clone()),
+            id,
             event: args.event_type.to_string(),
-            build_id: None,
+            build_id: args.version,
             basename: basename.unwrap(),
             updated_at: None,
             created_at: None,
@@ -310,8 +319,8 @@ fn process_and_sink_data(
         };
 
         let _cur_bin_id = profiled_binary.id;
-        let mut parent_id: Option<i64> = None;
     for mut symlist in symlists {
+        let mut parent_id: Option<i64> = None;
         symlist.reverse();
         for mut stack in symlist {
             profiled_binary_map

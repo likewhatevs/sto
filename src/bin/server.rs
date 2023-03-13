@@ -247,19 +247,13 @@ async fn data(id: i64) -> Json<D3FlamegraphData> {
     data
 }
 
-#[get("/list")]
-async fn list() -> Json<Vec<ProfiledBinary>> {
-    Json(vec![ProfiledBinary {
-        id: 123,
-        event: "CYCLE".to_string(),
-        build_id: Some("whatevs".to_string()),
-        basename: "binary".to_string(),
-        updated_at: Some(Utc::now()),
-        created_at: Some(Utc::now() - chrono::Duration::days(1)),
-        sample_count: 10,
-        raw_data_size: 0,
-        processed_data_size: 0,
-    }])
+#[get("/data/<id>")]
+async fn metadata(id: i64) -> Json<ProfiledBinary> {
+    let mut conn = DB_POOL.get().expect("err getting db").acquire().await.expect("err getting db");
+    let pb = sqlx::query_as!(ProfiledBinary, "select * from profiled_binary where id=$1", id)
+        .fetch_one(&mut conn)
+        .await.expect("query err");
+    Json(pb)
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -280,25 +274,23 @@ async fn index(
     cm: &State<TeraContextManager>,
     etag_if_none_match: EtagIfNoneMatch<'_>,
 ) -> TeraResponse {
-    tera_response_cache!(cm, etag_if_none_match, "index", {
-        println!("Generate index-2 and cache it...");
-        let dummy_listing = TemplateListing{
-            name: "somename".to_string(),
-            id: 123,
-            date: Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()
-        };
-        let mut conn = DB_POOL.get().expect("err getting db").acquire().await.expect("err getting db");
-        let pb: Vec<ProfiledBinary> = sqlx::query_as!(ProfiledBinary, "select * from profiled_binary")
-        .fetch_all(&mut conn).await.expect("query err");
-        let mut template_listing: Vec<TemplateListing> = pb.iter().map(|x| TemplateListing{ name: x.basename.clone(), id: x.id, date: x.created_at.unwrap().format("%Y-%m-%d %H:%M:%S").to_string() } ).collect();
-        template_listing.push(dummy_listing);
-        tera_response!(
-            cm,
-            EtagIfNoneMatch::default(),
-            "index",
-            TemplateData{binaries: template_listing}
-        )
-    })
+    println!("Generate index-2 and cache it...");
+    let dummy_listing = TemplateListing{
+        name: "somename".to_string(),
+        id: 123,
+        date: Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()
+    };
+    let mut conn = DB_POOL.get().expect("err getting db").acquire().await.expect("err getting db");
+    let pb: Vec<ProfiledBinary> = sqlx::query_as!(ProfiledBinary, "select * from profiled_binary")
+    .fetch_all(&mut conn).await.expect("query err");
+    let mut template_listing: Vec<TemplateListing> = pb.iter().map(|x| TemplateListing{ name: x.basename.clone(), id: x.id, date: x.created_at.unwrap().format("%Y-%m-%d %H:%M:%S").to_string() } ).collect();
+    template_listing.push(dummy_listing);
+    tera_response!(
+        cm,
+        EtagIfNoneMatch::default(),
+        "index",
+        TemplateData{binaries: template_listing}
+    )
 }
 
 #[rocket::main]
@@ -342,7 +334,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 "index" => "src/templates/index.tera",
             );
         }))
-        .mount("/", routes![index, data, dist, data_ingest])
+        .mount("/", routes![index, data, dist, data_ingest, metadata])
         .ignite()
         .await?
         .launch()

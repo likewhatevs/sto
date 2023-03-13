@@ -54,6 +54,8 @@ pub struct Args {
     pub sample_freq: u64,
     #[arg(short, long, help = "name of thing being profiled")]
     pub binary: Option<String>,
+    #[arg(short, long, help = "version of thing being profiled")]
+    pub version: Option<String>,
     #[arg(
         short,
         long,
