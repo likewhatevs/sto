@@ -178,7 +178,7 @@ https://cdn.jsdelivr.net/npm/jsgrid@1.5.3/dist/jsgrid.min.js
                     <tr>
                         <th scope="col">id</th>
                         <th scope="col">Name</th>
-                        <th scope="col">Verion</th>
+                        <th scope="col">Version</th>
                         <th scope="col">Samples</th>
                         <th scope="col">Raw Data Size</th>
                         <th scope="col">Sto Data Size</th>

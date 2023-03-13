@@ -221,8 +221,38 @@ async fn data(id: i64) -> Json<D3FlamegraphData> {
         fn build_dag(cur_id: i64, sn_id_map: &HashMap<i64, StackNode>, sd_map: &HashMap<i64, StackNodeData>, sn_p_id_map: &HashMap<i64, Vec<StackNode>>) -> D3FlamegraphData {
             let cur_sn = sn_id_map.get(&cur_id).unwrap();
             let cur_sd = sd_map.get(&(cur_sn.stack_node_data_id.clone())).unwrap();
+            let name = match cur_sd.clone().file{
+                Some(x) => {
+                    match x.contains("/"){
+                        true => {
+                            let (_, base_filename) = x.rsplit_once('/').unwrap();
+                            match cur_sd.line_number.clone() {
+                                Some(y) => {
+                                    format!("{}:{}:{}", cur_sd.symbol.clone(), base_filename, y)
+                                },
+                                None => {
+                                    format!("{}:{}", cur_sd.symbol.clone(), base_filename)
+                                }
+                            }
+                        },
+                        false => {
+                            match cur_sd.line_number.clone() {
+                                Some(y) => {
+                                    format!("{}:{}:{}", cur_sd.symbol.clone(), x, y)
+                                },
+                                None => {
+                                    format!("{}:{}", cur_sd.symbol.clone(), x)
+                                }
+                            }
+                        }
+                    }
+                },
+                None => {
+                    cur_sd.symbol.clone()
+                },
+            };
             D3FlamegraphData {
-                name: cur_sd.symbol.clone(),
+                name,
                 value: cur_sn.sample_count.clone(),
                 filename: cur_sd.file.clone(),
                 line_number: cur_sd.line_number.clone(),

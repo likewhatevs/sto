@@ -16,7 +16,7 @@ void doMathStuff(){
 }
 
 void doBusinessLogic(){
-    int i = 100000*10000;
+    int i = 100000*100;
     while (i > 0) {
         int a = 2;
         int b = a * 2;

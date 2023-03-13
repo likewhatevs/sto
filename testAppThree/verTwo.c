@@ -2,7 +2,7 @@
 #include <unistd.h>
 
 void awesomeDependency(){
-    int i = 100000*100;
+    int i = 100000*300;
     while (i > 0) {
         int a = 2;
         int b = a * 2;
