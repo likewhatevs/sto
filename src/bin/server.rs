@@ -193,7 +193,6 @@ async fn data(id: i64) -> Json<D3FlamegraphData> {
     // the dag should rly be made by some cool function in the db (or well i haven't tried that and want to see how it work).
     // for now this simpler.
 
-    // Size of one stack frame for `factorial()` was measured experimentally
     let mut conn = DB_POOL.get().expect("err getting db").acquire().await.expect("err getting db");
     let sn = sqlx::query_as!(StackNode, "select * from stack_node where profiled_binary_id=$1", id)
         .fetch_all(&mut conn)
