@@ -27,7 +27,7 @@ pub type ProcessQueue = deadqueue::limited::Queue<Vec<Vec<SymbolizedResult>>>;
 pub const HASHER_SEED: Key = Key([1, 2, 3, 4]);
 pub static NODES: Lazy<Arc<DashMap<i64, StackNode>>> = Lazy::new(|| Arc::new(DashMap::new()));
 pub static DATAS: Lazy<Arc<DashMap<i64, StackNodeData>>> = Lazy::new(|| Arc::new(DashMap::new()));
-pub static BINARIES: Lazy<Arc<DashMap<i64, ProfiledBinary>>> =
+pub static BINARIES: Lazy<Arc<DashMap<i64, Executable>>> =
     Lazy::new(|| Arc::new(DashMap::new()));
 
 #[derive(ValueEnum, Debug, Serialize, Deserialize, Clone, Copy, enum_display_derive::Display)]
@@ -69,7 +69,7 @@ pub struct Args {
 pub struct StoData {
     pub stack_nodes: Vec<StackNode>,
     pub stack_node_datas: Vec<StackNodeData>,
-    pub profiled_binaries: Vec<ProfiledBinary>,
+    pub profiled_binaries: Vec<Executable>,
 }
 
 #[derive(Debug, Clone)]
@@ -79,7 +79,7 @@ pub struct StackInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, FromRow, Hash, Eq, PartialEq, DeepSizeOf)]
-pub struct ProfiledBinary {
+pub struct Executable {
     pub id: i64,
     pub event: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -100,7 +100,7 @@ pub struct StackNode {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<i64>,
     pub stack_node_data_id: i64,
-    pub profiled_binary_id: i64,
+    pub executable_id: i64,
     pub sample_count: i64,
 }
 
@@ -123,10 +123,10 @@ impl FromIterator<StackNodeData> for HashMap<i64, StackNodeData> {
     }
 }
 
-impl FromIterator<ProfiledBinary> for HashMap<i64, ProfiledBinary> {
+impl FromIterator<Executable> for HashMap<i64, Executable> {
     fn from_iter<I>(xs: I) -> Self
         where
-            I: IntoIterator<Item = ProfiledBinary>,
+            I: IntoIterator<Item = Executable>,
     {
         xs.into_iter().map(|x| (x.id.clone(), x)).collect()
     }

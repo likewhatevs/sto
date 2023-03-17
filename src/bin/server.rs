@@ -34,7 +34,7 @@ use serde_json::json;
 use sqlx::{query, Connection, Pool, Postgres, QueryBuilder};
 use tracing::Level;
 use tracing_subscriber::fmt::writer::MakeWriterExt;
-use sto::defs::{ProfiledBinary, StackNode, StackNodeData, StoData};
+use sto::defs::{Executable, StackNode, StackNodeData, StoData};
 
 #[derive(RustEmbed)]
 #[folder = "d3-flame-graph/dist/"]
@@ -101,7 +101,7 @@ async fn data_ingest(data: Json<StoData>) {
     DB_POOL.get().expect("err getting db").acquire().await.expect("err getting db").transaction(
         |mut conn|Box::pin(async move {
             let mut qb_3: QueryBuilder<Postgres> = QueryBuilder::new(
-                "insert into profiled_binary(id, event, build_id, basename, updated_at, sample_count, raw_data_size, processed_data_size) "
+                "insert into executable(id, event, build_id, basename, updated_at, sample_count, raw_data_size, processed_data_size) "
             );
             qb_3.push_values(pb_vec.take(BIND_LIMIT / 4), |mut b, pb| {
                 let id = pb.id as i64;
@@ -118,7 +118,7 @@ async fn data_ingest(data: Json<StoData>) {
                     .push_bind(raw_data_size)
                     .push_bind(processed_data_size);
             });
-            qb_3.push(" ON CONFLICT (id) DO UPDATE SET sample_count = profiled_binary.sample_count + excluded.sample_count, updated_at = excluded.updated_at, raw_data_size = profiled_binary.raw_data_size + excluded.raw_data_size, processed_data_size = profiled_binary.processed_data_size + excluded.processed_data_size ");
+            qb_3.push(" ON CONFLICT (id) DO UPDATE SET sample_count = executable.sample_count + excluded.sample_count, updated_at = excluded.updated_at, raw_data_size = executable.raw_data_size + excluded.raw_data_size, processed_data_size = executable.processed_data_size + excluded.processed_data_size ");
             let mut q3 = qb_3.build();
             q3.execute(&mut *conn).await
         })
@@ -128,7 +128,7 @@ async fn data_ingest(data: Json<StoData>) {
     DB_POOL.get().expect("err getting db").acquire().await.expect("err getting db").transaction(
         |mut conn|Box::pin(async move {
             let mut qb_2: QueryBuilder<Postgres> = QueryBuilder::new(
-                "insert into stack_node(id, parent_id, stack_node_data_id, profiled_binary_id, sample_count) "
+                "insert into stack_node(id, parent_id, stack_node_data_id, executable_id, sample_count) "
             );
             qb_2.push_values(sn_vec.take(BIND_LIMIT / 4), |mut b, sn| {
                 let id = sn.id as i64;
@@ -137,7 +137,7 @@ async fn data_ingest(data: Json<StoData>) {
                     None => {None}
                 };
                 let snd_id = sn.stack_node_data_id as i64;
-                let pb_id = sn.profiled_binary_id as i64;
+                let pb_id = sn.executable_id as i64;
                 let sample_count = sn.sample_count as i64;
                 b.push_bind(id)
                     .push_bind(parent_id)
@@ -194,14 +194,14 @@ async fn data(id: i64) -> Json<D3FlamegraphData> {
     // for now this simpler.
 
     let mut conn = DB_POOL.get().expect("err getting db").acquire().await.expect("err getting db");
-    let sn = sqlx::query_as!(StackNode, "select * from stack_node where profiled_binary_id=$1", id)
+    let sn = sqlx::query_as!(StackNode, "select * from stack_node where executable_id=$1", id)
         .fetch_all(&mut conn)
         .await.expect("query err");
 
-    let snd = sqlx::query_as!(StackNodeData, "select d.id as id, d.symbol as symbol, d.file as file, d.line_number as line_number from stack_node_data d inner join stack_node n ON n.stack_node_data_id = d.id where n.profiled_binary_id = $1 ", id)
+    let snd = sqlx::query_as!(StackNodeData, "select d.id as id, d.symbol as symbol, d.file as file, d.line_number as line_number from stack_node_data d inner join stack_node n ON n.stack_node_data_id = d.id where n.executable_id = $1 ", id)
         .fetch_all(&mut conn)
         .await.expect("query err");
-    let pb = sqlx::query_as!(ProfiledBinary, "select * from profiled_binary where id=$1", id)
+    let pb = sqlx::query_as!(Executable, "select * from executable where id=$1", id)
         .fetch_one(&mut conn)
         .await.expect("query err");
 
@@ -277,9 +277,9 @@ async fn data(id: i64) -> Json<D3FlamegraphData> {
 }
 
 #[get("/data/<id>")]
-async fn metadata(id: i64) -> Json<ProfiledBinary> {
+async fn metadata(id: i64) -> Json<Executable> {
     let mut conn = DB_POOL.get().expect("err getting db").acquire().await.expect("err getting db");
-    let pb = sqlx::query_as!(ProfiledBinary, "select * from profiled_binary where id=$1", id)
+    let pb = sqlx::query_as!(Executable, "select * from executable where id=$1", id)
         .fetch_one(&mut conn)
         .await.expect("query err");
     Json(pb)
@@ -310,7 +310,7 @@ async fn index(
         date: Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()
     };
     let mut conn = DB_POOL.get().expect("err getting db").acquire().await.expect("err getting db");
-    let pb: Vec<ProfiledBinary> = sqlx::query_as!(ProfiledBinary, "select * from profiled_binary")
+    let pb: Vec<Executable> = sqlx::query_as!(Executable, "select * from executable")
     .fetch_all(&mut conn).await.expect("query err");
     let mut template_listing: Vec<TemplateListing> = pb.iter().map(|x| TemplateListing{ name: x.basename.clone(), id: x.id, date: x.created_at.unwrap().format("%Y-%m-%d %H:%M:%S").to_string() } ).collect();
     template_listing.push(dummy_listing);

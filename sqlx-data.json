@@ -19,7 +19,7 @@
           "type_info": "Int8"
         },
         {
-          "name": "profiled_binary_id",
+          "name": "executable_id",
           "ordinal": 3,
           "type_info": "Int8"
         },
@@ -42,7 +42,7 @@
         ]
       }
     },
-    "query": "select * from stack_node where profiled_binary_id=$1"
+    "query": "select * from stack_node where executable_id=$1"
   },
   "33f9cfb3dc2d9947ac5c1e96e129ed147ffb6e7c3d340309ce4e450dbf365479": {
     "describe": {
@@ -110,7 +110,7 @@
         ]
       }
     },
-    "query": "select * from profiled_binary where id=$1"
+    "query": "select * from executable where id=$1"
   },
   "949487f50c584c923f9ddb69daf6bc6adc45db62dfc50a465254f691ad5c357b": {
     "describe": {
@@ -148,6 +148,6 @@
         ]
       }
     },
-    "query": "select d.id as id, d.symbol as symbol, d.file as file, d.line_number as line_number from stack_node_data d inner join stack_node n ON n.stack_node_data_id = d.id where n.profiled_binary_id = $1 "
+    "query": "select d.id as id, d.symbol as symbol, d.file as file, d.line_number as line_number from stack_node_data d inner join stack_node n ON n.stack_node_data_id = d.id where n.executable_id = $1 "
   }
 }

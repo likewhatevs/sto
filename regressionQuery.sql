@@ -5,9 +5,9 @@ with verOne as (select pb.build_id,
                        snd.line_number,
 --        snd.id as snd_id, (because different file names)
                        snd.file
-                from profiled_binary pb
+                from executable pb
                          inner join
-                     stack_node sn on sn.profiled_binary_id = pb.id
+                     stack_node sn on sn.executable_id = pb.id
                          inner join stack_node_data snd on sn.stack_node_data_id = snd.id
                 where basename = 'testAppThree'
                   and build_id = 'one'
@@ -19,9 +19,9 @@ with verOne as (select pb.build_id,
                        snd.line_number,
 --        snd.id as snd_id, (because different file names)
                        snd.file
-                from profiled_binary pb
+                from executable pb
                          inner join
-                     stack_node sn on sn.profiled_binary_id = pb.id
+                     stack_node sn on sn.executable_id = pb.id
                          inner join stack_node_data snd on sn.stack_node_data_id = snd.id
                 where basename = 'testAppThree'
                   and build_id = 'two'

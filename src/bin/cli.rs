@@ -23,7 +23,7 @@ use std::{process, thread, time};
 use dotenvy::dotenv;
 use sto::bpftune::bpftune_bss_types::stacktrace_event;
 use sto::defs::{
-    Args, EventType, ProcessQueue, ProfiledBinary, ReadQueue, StackInfo, StackNode, StackNodeData,
+    Args, EventType, ProcessQueue, Executable, ReadQueue, StackInfo, StackNode, StackNodeData,
     StoData, HASHER_SEED, PROCESS_TASK_COUNT, READ_TASK_COUNT, WORKER_COUNT,
 };
 extern crate clap;
@@ -206,7 +206,7 @@ fn id_stack_node(data: &mut StackNode) {
                 hasher.append(&parent_id.to_be_bytes());
             }
             hasher.append(&data.stack_node_data_id.to_be_bytes());
-            hasher.append(&data.profiled_binary_id.to_be_bytes());
+            hasher.append(&data.executable_id.to_be_bytes());
             let id_neg: i64 = hasher.finalize64() as i64;
             let id = id_neg.abs() as i64;
             // should probably restructure this a bit because of 0 id in cache.
@@ -273,6 +273,7 @@ fn process(args: Args) -> Result<(), anyhow::Error> {
                         });
                         buf.clear();
                     }
+
                 }
                 Err(_) => {
                 }
@@ -294,7 +295,7 @@ fn process_and_sink_data(
         event!(Level::DEBUG,"stack is");
         let mut stack_node_map: HashMap<i64, StackNode> = HashMap::new();
         let mut stack_node_data_map: HashMap<i64, StackNodeData> = HashMap::new();
-        let mut profiled_binary_map: HashMap<i64, ProfiledBinary> = HashMap::new();
+        let mut executable_map: HashMap<i64, Executable> = HashMap::new();
         let basename = args.clone().binary.clone();
         let version = args.clone().version;
         let id = match version {
@@ -306,7 +307,7 @@ fn process_and_sink_data(
             }
         };
 
-        let profiled_binary = ProfiledBinary {
+        let executable = Executable {
             id,
             event: args.event_type.to_string(),
             build_id: args.version,
@@ -318,16 +319,16 @@ fn process_and_sink_data(
             processed_data_size: 0,
         };
 
-        let _cur_bin_id = profiled_binary.id;
+        let _cur_bin_id = executable.id;
     for mut symlist in symlists {
         let mut parent_id: Option<i64> = None;
         symlist.reverse();
         for mut stack in symlist {
-            profiled_binary_map
-                .entry(profiled_binary.id)
-                .or_insert(profiled_binary.clone());
-            profiled_binary_map
-                .entry(profiled_binary.id)
+            executable_map
+                .entry(executable.id)
+                .or_insert(executable.clone());
+            executable_map
+                .entry(executable.id)
                 .and_modify(|e| e.sample_count += 1)
                 .and_modify(|e| e.raw_data_size += stack.deep_size_of() as i64);
             // stack.reverse();
@@ -352,7 +353,7 @@ fn process_and_sink_data(
                     id: 0,
                     parent_id,
                     stack_node_data_id: data.id,
-                    profiled_binary_id: profiled_binary.id,
+                    executable_id: executable.id,
                     sample_count: 1,
                 };
                 id_stack_node(&mut stack_node);
@@ -368,14 +369,14 @@ fn process_and_sink_data(
         let mut data_out = StoData {
             stack_nodes: stack_node_map.values().map(|x| (*x).clone()).collect(),
             stack_node_datas: stack_node_data_map.values().map(|x| (*x).clone()).collect(),
-            profiled_binaries: profiled_binary_map.values().map(|x| (*x).clone()).collect(),
+            profiled_binaries: executable_map.values().map(|x| (*x).clone()).collect(),
         };
 
-        profiled_binary_map
-            .entry(profiled_binary.id)
+        executable_map
+            .entry(executable.id)
             .and_modify(|e| e.processed_data_size += data_out.deep_size_of() as i64);
 
-        data_out.profiled_binaries = profiled_binary_map.values().map(|x| (*x).clone()).collect();
+        data_out.profiled_binaries = executable_map.values().map(|x| (*x).clone()).collect();
 
         let client = reqwest::blocking::Client::new();
         match client.post(args.url.clone()).json(&data_out).send() {

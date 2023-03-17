@@ -4,14 +4,10 @@ RM      = rm -f
 
 default: all
 
-all: verOne verTwo
+all: demo
 
-verOne: verOne.c
-	$(CC) $(CFLAGS) -o verOne verOne.c
-
-verTwo: verTwo.c
-	$(CC) $(CFLAGS) -o verTwo verTwo.c
+demo: demo.c
+	$(CC) $(CFLAGS) -o demo demo.c
 
 clean:
-	$(RM) verOne
-	$(RM) verTwo
+	$(RM) demo
