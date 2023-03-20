@@ -1,6 +1,6 @@
 {
   "db": "PostgreSQL",
-  "07cdf9919b36c9f656a30480888dd9e8f2b17a6b1d6e70989d8a738bb3292483": {
+  "0e0059686c454190a5b9569e8ca415ab85e34c49d2a03ae9f0f7fd17469b10b3": {
     "describe": {
       "columns": [
         {
@@ -9,42 +9,64 @@
           "type_info": "Int8"
         },
         {
-          "name": "parent_id",
+          "name": "event",
           "ordinal": 1,
-          "type_info": "Int8"
+          "type_info": "Text"
         },
         {
-          "name": "stack_node_data_id",
+          "name": "build_id",
           "ordinal": 2,
-          "type_info": "Int8"
+          "type_info": "Text"
         },
         {
-          "name": "executable_id",
+          "name": "basename",
           "ordinal": 3,
-          "type_info": "Int8"
+          "type_info": "Text"
+        },
+        {
+          "name": "updated_at",
+          "ordinal": 4,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 5,
+          "type_info": "Timestamptz"
         },
         {
           "name": "sample_count",
-          "ordinal": 4,
+          "ordinal": 6,
+          "type_info": "Int8"
+        },
+        {
+          "name": "raw_data_size",
+          "ordinal": 7,
+          "type_info": "Int8"
+        },
+        {
+          "name": "processed_data_size",
+          "ordinal": 8,
           "type_info": "Int8"
         }
       ],
       "nullable": [
         false,
+        false,
+        true,
+        false,
+        true,
         true,
         false,
         false,
         false
       ],
       "parameters": {
-        "Left": [
-          "Int8"
-        ]
+        "Left": []
       }
     },
-    "query": "select * from stack_node where executable_id=$1"
+    "query": "select * from executable"
   },
-  "33f9cfb3dc2d9947ac5c1e96e129ed147ffb6e7c3d340309ce4e450dbf365479": {
+  "49afdb87c5db119c72121d6bdfe5aa2bd12e46f61b2caf04576872ace8191450": {
     "describe": {
       "columns": [
         {
@@ -112,7 +134,51 @@
     },
     "query": "select * from executable where id=$1"
   },
-  "949487f50c584c923f9ddb69daf6bc6adc45db62dfc50a465254f691ad5c357b": {
+  "9042c03d58f7f3cc3516e79571858fce14864e3184dba3ad2f6e93bfa1df84fe": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int8"
+        },
+        {
+          "name": "parent_id",
+          "ordinal": 1,
+          "type_info": "Int8"
+        },
+        {
+          "name": "stack_node_data_id",
+          "ordinal": 2,
+          "type_info": "Int8"
+        },
+        {
+          "name": "executable_id",
+          "ordinal": 3,
+          "type_info": "Int8"
+        },
+        {
+          "name": "sample_count",
+          "ordinal": 4,
+          "type_info": "Int8"
+        }
+      ],
+      "nullable": [
+        false,
+        true,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int8"
+        ]
+      }
+    },
+    "query": "select * from stack_node where executable_id=$1"
+  },
+  "b53b7bb244d97202712f3ce8f3241b4f5ae3a61199aaefa2273705adafcaa2a8": {
     "describe": {
       "columns": [
         {

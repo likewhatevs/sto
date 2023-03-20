@@ -182,6 +182,7 @@ https://cdn.jsdelivr.net/npm/jsgrid@1.5.3/dist/jsgrid.min.js
                         <th scope="col">Samples</th>
                         <th scope="col">Raw Data Size</th>
                         <th scope="col">Sto Data Size</th>
+                        <th scope="col">Storage Size Reduction</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -192,6 +193,7 @@ https://cdn.jsdelivr.net/npm/jsgrid@1.5.3/dist/jsgrid.min.js
                         <td>${response.data.sample_count}</td>
                         <td>${formatBytes(response.data.raw_data_size)}</td>
                         <td>${formatBytes(response.data.processed_data_size)}</td>
+                        <td>${Math.round(response.data.raw_data_size/response.data.processed_data_size)}x</td>
                     </tr>
                     </tbody>
                 </table>`;
