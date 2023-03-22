@@ -36,9 +36,9 @@ use tracing::Level;
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use sto::defs::{Executable, StackNode, StackNodeData, StoData};
 
-#[derive(RustEmbed)]
-#[folder = "d3-flame-graph/dist/"]
-struct Dist;
+// #[derive(RustEmbed)]
+// #[folder = "d3-flame-graph/dist/"]
+// struct Dist;
 
 static DB_POOL: OnceCell<Pool<Postgres>> = OnceCell::new();
 
@@ -58,17 +58,17 @@ pub struct D3FlamegraphData {
     pub children: Option<Vec<D3FlamegraphData>>,
 }
 
-#[get("/dist/<file..>")]
-async fn dist(file: PathBuf) -> Option<(ContentType, Cow<'static, [u8]>)> {
-    let filename = file.display().to_string();
-    let asset = Dist::get(&filename)?;
-    let content_type = file
-        .extension()
-        .and_then(OsStr::to_str)
-        .and_then(ContentType::from_extension)
-        .unwrap_or(ContentType::Bytes);
-    Some((content_type, asset.data))
-}
+// #[get("/dist/<file..>")]
+// async fn dist(file: PathBuf) -> Option<(ContentType, Cow<'static, [u8]>)> {
+//     let filename = file.display().to_string();
+//     let asset = Dist::get(&filename)?;
+//     let content_type = file
+//         .extension()
+//         .and_then(OsStr::to_str)
+//         .and_then(ContentType::from_extension)
+//         .unwrap_or(ContentType::Bytes);
+//     Some((content_type, asset.data))
+// }
 
 #[post("/data/samples", format = "json", data = "<data>")]
 async fn data_ingest(data: Json<StoData>) {
@@ -363,7 +363,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 "index" => "src/templates/index.tera",
             );
         }))
-        .mount("/", routes![index, data, dist, data_ingest, metadata])
+        .mount("/", routes![index, data, data_ingest, metadata])
         .ignite()
         .await?
         .launch()
