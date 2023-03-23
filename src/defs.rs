@@ -36,6 +36,7 @@ pub enum EventType {
     Clock,
 }
 
+#[clap(disable_version_flag = true)]
 #[derive(Parser, Debug, Serialize, Deserialize, Clone)]
 #[command(author, version, about, long_about = "Do stuff")]
 pub struct Args {
