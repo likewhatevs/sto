@@ -6,7 +6,7 @@ This repo contains a server, cli and (super basic) UI to store/retrieve profiler
 
 The main purpose of this repo is to share ideas. I'll link some slides here that explain this more, but TL;DR you can do cool stuff if you represent profiler data in a DAG (which it is) so this does that.
 
-The cli stores/uploads profiler data to postgres, via the server. The cli profiles a provided locally running pid (via libbpf), symbolizes it (via blazesym) and posts it to the server. The interesting part of the server is more/less [this](https://github.com/likewhatevs/sto/blob/f160f9e2f28bf5af815fc0079eb20c298913186c/src/bin/server.rs#L196-L277). The CLI is all kinda interesting, but [also short](https://github.com/likewhatevs/sto/blob/main/src/bin/cli.rs).
+The cli stores/uploads profiler data to postgres, via the server. The cli profiles a provided locally running pid (via libbpf), symbolizes it (via blazesym) and posts it to the server. The interesting part of the server is more/less [this](https://github.com/likewhatevs/sto/blob/f160f9e2f28bf5af815fc0079eb20c298913186c/src/bin/server.rs#L196-L277). The CLI is all kinda interesting, but [also short](https://github.com/likewhatevs/sto/blob/main/src/bin/cli.rs). There's also a couple of cool DB functions [here](https://github.com/likewhatevs/sto/blob/6bfc8555001debb50efc1f25757781ff6b9b14b2/migrations/20230305040305_init.up.sql#L43-L117).
 
 The UI (templated html web page which GET's some json from the server) shows these stored profiles, along with the capacity savings the storage approach used by this repo uses.
 
