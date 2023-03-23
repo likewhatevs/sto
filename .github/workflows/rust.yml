@@ -10,7 +10,9 @@ env:
   CARGO_TERM_COLOR: always
 jobs:
   build:
-    runs-on: likewhatevs/sto-devcontainer
+    runs-on: ubuntu-latest
+    container:
+      image: likewhatevs/sto-container
     steps:
       - uses: actions/checkout@v2
       - name: Install latest nightly
