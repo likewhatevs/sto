@@ -18,7 +18,7 @@ Here's a screenshot of the UI:
 
 ### How to run this all locally and see how this works for your data.
 
-The easiest way is to use something like gentoo or arch to have the latest-and-greatest kernel and everything else running locally. Ignoring that incredibly important detail, the dependencies are all in .devcontainer, in either Dockerfile.db or Dockerfile.
+The easiest way is to use something like gentoo or arch to have the latest-and-greatest kernel and everything else running locally. Ignoring the incredibly important detail of kernel version, the dependencies are all in .devcontainer, in either Dockerfile.db or Dockerfile.
 
 ### (future-ish) quickstart/live demo.
 #### Note -- this does not work *yet*, codespaces are running an older kernel than this needs, kernel req TBD (I think 5.19 may work but need to confirm).
