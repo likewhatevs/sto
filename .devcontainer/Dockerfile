@@ -21,6 +21,10 @@ RUN apt-get update && \
         libatomic1 \
         libgoogle-glog-dev \
         openjdk-17-jdk-headless \
+        iotop \
+        atop \
+        ncdu \
+        htop \
         pkg-config && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
