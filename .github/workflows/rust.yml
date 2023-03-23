@@ -14,8 +14,7 @@ jobs:
     container:
       image: likewhatevs/sto-devcontainer:main
     steps:
-      - name: Setup rustup
-        run: rustup default nightly
+      - uses: actions/checkout@v2
       - name: Run cargo check
         uses: actions-rs/cargo@v1
         with:
