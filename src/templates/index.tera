@@ -4,11 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <link
-            rel="stylesheet"
-            type="text/css"
-            href="dist/d3-flamegraph.css"
-    />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/d3-flame-graph@4.1.3/dist/d3-flamegraph.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet"
           integrity="sha384-GLhlTQ8iRABdZLl6O3oVMWSktQOp6b7In1Zl3/Jr59b6EGGoI1aFkw7cmDA6j6gD" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/bumbeishvili/d3-tip-for-v6@4/d3-tip.min.css">
@@ -71,18 +67,9 @@ https://cdn.jsdelivr.net/npm/jquery@3.6.3/dist/jquery.min.js
 <script src="
 https://cdn.jsdelivr.net/npm/axios@1.3.4/dist/axios.min.js
 "></script>
-<script
-        type="text/javascript"
-        src="dist/d3-flamegraph.min.js"
-></script>
-<script
-        type="text/javascript"
-        src="dist/d3-flamegraph-colorMapper.min.js"
-></script>
-<script
-        type="text/javascript"
-        src="dist/d3-flamegraph-tooltip.min.js"
-></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-flame-graph@4.1.3/dist/d3-flamegraph.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-flame-graph@4.1.3/dist/d3-flamegraph-colorMapper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-flame-graph@4.1.3/dist/d3-flamegraph-tooltip.min.js"></script>
 <script src="
 https://cdn.jsdelivr.net/npm/jsgrid@1.5.3/dist/jsgrid.min.js
 "></script>
