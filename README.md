@@ -13,3 +13,6 @@ The server and database are deployable via docker-compose (which is to be added 
 Here's a screenshot of the UI:
 
 <img width="1319" alt="CleanShot 2023-03-13 at 02 34 05@2x" src="https://user-images.githubusercontent.com/12107998/225395658-528dfdb7-5d5c-4080-81d2-d0e99c2a7da5.png">
+
+
+
