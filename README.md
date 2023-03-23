@@ -62,7 +62,7 @@ cd demo && make && ./demo
 ![CleanShot 2023-03-23 at 01 47 23@2x](https://user-images.githubusercontent.com/12107998/227128501-dae10b2b-0916-4409-ab57-cce31f6cae94.png)
 
 ### Cool things used here
-https://github.com/hodgesds/bpftune -- profiler to generate audio from stack snapshots so you can hear the sounds of all your polling and locks.
-https://github.com/libbpf/libbpf-rs -- enable using bpf profilers via rust easy because rust makes some things easier.
-https://github.com/libbpf/blazesym -- deal with the hard problem of symbolization for me because it's really hard. Also in rust.
-lots of random copy pastes from the internet that I don't recall atm lol.
+* https://github.com/hodgesds/bpftune -- profiler to generate audio from stack snapshots so you can hear the sounds of all your polling and locks.
+* https://github.com/libbpf/libbpf-rs -- enable using bpf profilers via rust easy because rust makes some things easier.
+* https://github.com/libbpf/blazesym -- deal with the hard problem of symbolization for me because it's really hard. Also in rust.
+* lots of random copy pastes from the internet that I don't recall atm lol.
