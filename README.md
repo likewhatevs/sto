@@ -4,7 +4,7 @@
 
 This repo contains a server, cli and (super basic) UI to store/retrieve profiler data in an efficient manner. There are also a couple of cool DB functions that leverage the properties of the schema.
 
-The main purpose of this repo is to share ideas.
+The main purpose of this repo is to share ideas. I'll link some slides here that explain this more, but TL;DR you can do cool stuff if you represent profiler data in a DAG (which it is) so this does that.
 
 The cli stores/uploads profiler data to postgres, via the server. The cli profiles a provided locally running pid (via libbpf), symbolizes it (via blazesym) and posts it to the server. The interesting part of the server is more/less [this](https://github.com/likewhatevs/sto/blob/f160f9e2f28bf5af815fc0079eb20c298913186c/src/bin/server.rs#L196-L277). The CLI is all kinda interesting, but [also short](https://github.com/likewhatevs/sto/blob/main/src/bin/cli.rs).
 
