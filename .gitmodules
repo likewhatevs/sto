@@ -1,3 +1,0 @@
-[submodule "d3-flame-graph"]
-	path = d3-flame-graph
-	url = https://github.com/spiermar/d3-flame-graph.git
