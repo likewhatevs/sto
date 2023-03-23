@@ -14,13 +14,6 @@ jobs:
     container:
       image: likewhatevs/sto-devcontainer:main
     steps:
-      - uses: actions/checkout@v2
-      - name: Install latest nightly
-        uses: actions-rs/toolchain@v1
-        with:
-            toolchain: nightly
-            override: true
-            components: rustfmt, clippy
       - name: Run cargo check
         uses: actions-rs/cargo@v1
         with:
