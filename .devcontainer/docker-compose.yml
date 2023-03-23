@@ -5,13 +5,7 @@ volumes:
 
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        # Use the VARIANT arg to pick a Debian OS version: buster, bullseye
-        # Use bullseye when on local on arm64/Apple Silicon.
-        VARIANT:  buster
+    image: likewhatevs/sto-devcontainer:main
     env_file:
         # Ensure that the variables in .env match the same variables in devcontainer.json
         - .env
