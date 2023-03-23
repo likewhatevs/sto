@@ -24,7 +24,11 @@
 				"mutantdino.resourcemonitor",
 				"rust-lang.rust-analyzer",
 				"tamasfe.even-better-toml",
-				"serayuzgur.crates"
+				"serayuzgur.crates",
+				"fwcd.kotlin",
+				"vscjava.vscode-gradle",
+				"ms-vscode.cpptools-extension-pack",
+				"ckolkman.vscode-postgres"
 			]
 		}
 	},
